@@ -1138,6 +1138,6 @@ if st.session_state.analyzed and st.session_state.results:
 # Footer
 st.markdown("""
 <div style="text-align: center; padding: 2rem; color: #9ca3af; font-size: 0.85rem;">
-    Built with 💜 for Hackathon 2024 | Powered by Groq AI
+    Built for Hackathon 2025 | Powered by Groq AI
 </div>
 """, unsafe_allow_html=True)

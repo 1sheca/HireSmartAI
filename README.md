@@ -130,7 +130,7 @@ ai-resume-shortlister/
 
 ## Built For
 
-Hackathon 2024 - AI Productivity Tools
+Hackathon 2025 - AI Productivity Tools
 
 ## License
 

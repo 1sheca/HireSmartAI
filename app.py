@@ -2,11 +2,13 @@ import streamlit as st
 import json
 import re
 import os
+import hashlib
 from pathlib import Path
 from groq import Groq
 import PyPDF2
 import io
 from dotenv import load_dotenv
+from docx import Document
 
 # Load environment variables from .env file
 load_dotenv()
@@ -593,6 +595,46 @@ def extract_text_from_pdf_path(pdf_path):
     except Exception as e:
         return f"Error extracting text: {str(e)}"
 
+def extract_text_from_docx(docx_file):
+    """Extract text from uploaded DOCX file"""
+    try:
+        doc = Document(io.BytesIO(docx_file.read()))
+        text = ""
+        for para in doc.paragraphs:
+            text += para.text + " "
+        # Also extract from tables
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    text += cell.text + " "
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+    except Exception as e:
+        return f"Error extracting text: {str(e)}"
+
+def extract_text_from_docx_path(docx_path):
+    """Extract text from DOCX file path (for folder upload)"""
+    try:
+        doc = Document(docx_path)
+        text = ""
+        for para in doc.paragraphs:
+            text += para.text + " "
+        # Also extract from tables
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    text += cell.text + " "
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+    except Exception as e:
+        return f"Error extracting text: {str(e)}"
+
+def get_content_hash(text):
+    """Generate hash of resume content for duplicate detection"""
+    # Normalize text: lowercase, remove extra spaces
+    normalized = re.sub(r'\s+', ' ', text.lower().strip())
+    return hashlib.md5(normalized.encode()).hexdigest()
+
 def analyze_resume(client, resume_text, job_description, candidate_name):
     """Analyze a single resume against job description using Groq"""
     prompt = f"""You are an expert technical recruiter with 15 years of experience.
@@ -785,10 +827,10 @@ with col1:
     if upload_method == "📄 Upload Files":
         uploaded_files = st.file_uploader(
             "Upload Resumes",
-            type=['pdf'],
+            type=['pdf', 'docx', 'doc'],
             accept_multiple_files=True,
             label_visibility="collapsed",
-            help="Drag & drop PDF files here (supports 250+ files)"
+            help="Drag & drop PDF/DOCX files here (supports 250+ files)"
         )
 
         if uploaded_files:
@@ -818,30 +860,47 @@ with col1:
         if folder_path:
             folder_path = Path(folder_path)
             if folder_path.exists() and folder_path.is_dir():
-                pdf_files = list(folder_path.glob("*.pdf")) + list(folder_path.glob("*.PDF"))
+                # Find PDF and DOCX files
+                resume_files = (
+                    list(folder_path.glob("*.pdf")) +
+                    list(folder_path.glob("*.PDF")) +
+                    list(folder_path.glob("*.docx")) +
+                    list(folder_path.glob("*.DOCX")) +
+                    list(folder_path.glob("*.doc")) +
+                    list(folder_path.glob("*.DOC"))
+                )
 
-                if pdf_files:
-                    st.success(f"✅ Found {len(pdf_files)} PDF files in folder")
+                if resume_files:
+                    pdf_count = len([f for f in resume_files if f.suffix.lower() == '.pdf'])
+                    docx_count = len([f for f in resume_files if f.suffix.lower() in ['.docx', '.doc']])
+                    st.success(f"✅ Found {len(resume_files)} files ({pdf_count} PDF, {docx_count} DOCX/DOC)")
 
                     # Store folder files info in session state
-                    st.session_state.folder_pdf_paths = pdf_files
+                    st.session_state.folder_pdf_paths = resume_files
 
                     # Show preview
                     file_chips = ""
-                    for f in pdf_files[:3]:
+                    for f in resume_files[:3]:
                         file_chips += f'<span class="file-chip">📄 {f.name}</span>'
-                    if len(pdf_files) > 3:
-                        file_chips += f'<span class="file-chip">+{len(pdf_files)-3} others</span>'
+                    if len(resume_files) > 3:
+                        file_chips += f'<span class="file-chip">+{len(resume_files)-3} others</span>'
                     st.markdown(file_chips, unsafe_allow_html=True)
 
                     # Option to include subfolders
                     include_subfolders = st.checkbox("Include subfolders", value=False)
                     if include_subfolders:
-                        pdf_files = list(folder_path.rglob("*.pdf")) + list(folder_path.rglob("*.PDF"))
-                        st.session_state.folder_pdf_paths = pdf_files
-                        st.info(f"📂 Total with subfolders: {len(pdf_files)} PDFs")
+                        resume_files = (
+                            list(folder_path.rglob("*.pdf")) +
+                            list(folder_path.rglob("*.PDF")) +
+                            list(folder_path.rglob("*.docx")) +
+                            list(folder_path.rglob("*.DOCX")) +
+                            list(folder_path.rglob("*.doc")) +
+                            list(folder_path.rglob("*.DOC"))
+                        )
+                        st.session_state.folder_pdf_paths = resume_files
+                        st.info(f"📂 Total with subfolders: {len(resume_files)} files")
                 else:
-                    st.warning("⚠️ No PDF files found in this folder")
+                    st.warning("⚠️ No PDF/DOCX files found in this folder")
                     st.session_state.folder_pdf_paths = []
             else:
                 st.error("❌ Folder not found. Please check the path.")
@@ -879,15 +938,18 @@ if analyze_clicked:
     elif not job_description:
         st.error("⚠️ Please enter a job description")
     elif not files_to_process:
-        st.error("⚠️ Please upload resumes or select a folder with PDFs")
+        st.error("⚠️ Please upload resumes or select a folder with PDF/DOCX files")
     else:
         try:
             client = Groq(api_key=GROQ_API_KEY)
             progress_bar = st.progress(0)
             status_text = st.empty()
             time_estimate = st.empty()
+            duplicate_info = st.empty()
 
             results = []
+            seen_hashes = {}  # For duplicate detection
+            duplicates_skipped = 0
             total = len(files_to_process)
 
             # Show estimate for large batches
@@ -895,38 +957,69 @@ if analyze_clicked:
                 est_time = total * 2  # ~2 seconds per resume
                 time_estimate.info(f"⏱️ Estimated time: {est_time // 60}m {est_time % 60}s for {total} resumes")
 
-            for idx, pdf_item in enumerate(files_to_process):
+            for idx, file_item in enumerate(files_to_process):
                 if use_folder:
                     # Processing from folder path
-                    pdf_path = pdf_item
-                    file_name = pdf_path.name
+                    file_path = file_item
+                    file_name = file_path.name
+                    file_ext = file_path.suffix.lower()
                     status_text.text(f"🔍 Analyzing {file_name}... ({idx + 1}/{total})")
-                    resume_text = extract_text_from_pdf_path(pdf_path)
+
+                    # Extract text based on file type
+                    if file_ext == '.pdf':
+                        resume_text = extract_text_from_pdf_path(file_path)
+                    elif file_ext in ['.docx', '.doc']:
+                        resume_text = extract_text_from_docx_path(file_path)
+                    else:
+                        resume_text = "Error: Unsupported file format"
                 else:
                     # Processing uploaded file
-                    file_name = pdf_item.name
+                    file_name = file_item.name
+                    file_ext = Path(file_name).suffix.lower()
                     status_text.text(f"🔍 Analyzing {file_name}... ({idx + 1}/{total})")
-                    resume_text = extract_text_from_pdf(pdf_item)
+
+                    # Extract text based on file type
+                    if file_ext == '.pdf':
+                        resume_text = extract_text_from_pdf(file_item)
+                    elif file_ext in ['.docx', '.doc']:
+                        resume_text = extract_text_from_docx(file_item)
+                    else:
+                        resume_text = "Error: Unsupported file format"
+
+                # Clean file name for display
+                clean_name = file_name
+                for ext in ['.pdf', '.PDF', '.docx', '.DOCX', '.doc', '.DOC']:
+                    clean_name = clean_name.replace(ext, '')
 
                 if resume_text.startswith("Error"):
                     results.append({
-                        "candidate_name": file_name.replace('.pdf', '').replace('.PDF', ''),
+                        "candidate_name": clean_name,
                         "fit_score": 0,
                         "error": resume_text,
                         "verdict": "Error",
                         "current_role": "Unknown",
                         "skills_matched": [],
                         "skills_missing": [],
-                        "summary": "Could not extract text from PDF"
+                        "summary": "Could not extract text from file"
                     })
                 else:
-                    result = analyze_resume(
-                        client,
-                        resume_text,
-                        job_description,
-                        file_name.replace('.pdf', '').replace('.PDF', '')
-                    )
-                    results.append(result)
+                    # Check for duplicates using content hash
+                    content_hash = get_content_hash(resume_text)
+
+                    if content_hash in seen_hashes:
+                        # Duplicate found - skip
+                        duplicates_skipped += 1
+                        duplicate_info.warning(f"⚠️ Skipped {duplicates_skipped} duplicate(s) - '{file_name}' same as '{seen_hashes[content_hash]}'")
+                    else:
+                        # New unique resume
+                        seen_hashes[content_hash] = file_name
+                        result = analyze_resume(
+                            client,
+                            resume_text,
+                            job_description,
+                            clean_name
+                        )
+                        results.append(result)
 
                 progress_bar.progress((idx + 1) / total)
 
@@ -937,6 +1030,13 @@ if analyze_clicked:
             status_text.empty()
             progress_bar.empty()
             time_estimate.empty()
+
+            # Show final duplicate summary
+            if duplicates_skipped > 0:
+                duplicate_info.success(f"✅ Processed {len(results)} unique resumes. Skipped {duplicates_skipped} duplicate(s).")
+            else:
+                duplicate_info.empty()
+
             st.rerun()
 
         except Exception as e:

@@ -170,6 +170,166 @@ Quantitative Analyst | JPMorgan | 2016-2019
 - Created fraud detection system with 98% precision
 - Built time series models for market prediction""",
         "education": "Ph.D. Financial Engineering, Princeton\nM.S. Applied Mathematics, Columbia"
+    },
+    {
+        "name": "Kevin Patel",
+        "email": "kevin.patel@email.com",
+        "phone": "+1-555-0111",
+        "summary": "AI Research Scientist with 6 years of experience in deep learning, reinforcement learning, and neural architecture design.",
+        "skills": "Python, PyTorch, TensorFlow, JAX, Reinforcement Learning, Deep Learning, Neural Networks, Research, Publications, CUDA, C++, Math",
+        "experience": """Research Scientist | DeepMind | 2021-Present
+- Published 8 papers in top ML conferences (NeurIPS, ICML)
+- Developed novel attention mechanisms for transformers
+- Led research on multi-agent reinforcement learning
+
+AI Researcher | Meta AI | 2018-2021
+- Built self-supervised learning systems
+- Contributed to PyTorch library development""",
+        "education": "Ph.D. Machine Learning, UC Berkeley\nB.S. Computer Science, IIT Bombay"
+    },
+    {
+        "name": "Laura Nguyen",
+        "email": "laura.nguyen@email.com",
+        "phone": "+1-555-0112",
+        "summary": "Data Analyst with 2 years of experience. Proficient in SQL and visualization tools. Looking to grow into data science.",
+        "skills": "SQL, Excel, Tableau, Power BI, Basic Python, Google Analytics, Data Visualization, Reporting, Statistics Fundamentals",
+        "experience": """Data Analyst | E-commerce Startup | 2022-Present
+- Created weekly sales dashboards in Tableau
+- Wrote SQL queries for business reporting
+- Analyzed customer conversion funnels
+
+Marketing Analyst Intern | Agency | 2021-2022
+- Tracked campaign metrics using Google Analytics
+- Prepared monthly performance reports""",
+        "education": "B.S. Business Analytics, Arizona State University"
+    },
+    {
+        "name": "Michael Zhang",
+        "email": "michael.zhang@email.com",
+        "phone": "+1-555-0113",
+        "summary": "Full Stack Developer with interest in ML. 5 years of web development experience, recently completed ML bootcamp.",
+        "skills": "JavaScript, React, Node.js, Python, SQL, MongoDB, AWS, Docker, Basic ML, Scikit-learn, HTML/CSS, Git, REST APIs",
+        "experience": """Senior Developer | Tech Startup | 2020-Present
+- Built scalable web applications serving 100K users
+- Implemented basic ML features for product recommendations
+- Led frontend team of 3 developers
+
+Web Developer | Digital Agency | 2018-2020
+- Developed client websites and web applications
+- Created RESTful APIs using Node.js""",
+        "education": "B.S. Computer Science, UC Davis\nML Bootcamp Certificate, Coursera"
+    },
+    {
+        "name": "Nina Sharma",
+        "email": "nina.sharma@email.com",
+        "phone": "+1-555-0114",
+        "summary": "Healthcare Data Scientist with 4 years of experience in clinical analytics, patient outcome prediction, and medical imaging AI.",
+        "skills": "Python, R, SQL, TensorFlow, Medical Imaging, HIPAA, Clinical Data, Statistics, Survival Analysis, EHR Systems, SAS, Biostatistics",
+        "experience": """Data Scientist | Mayo Clinic | 2021-Present
+- Built patient readmission prediction model (AUC 0.89)
+- Developed medical image classification for radiology
+- Ensured HIPAA compliance in all ML pipelines
+
+Clinical Analyst | Kaiser Permanente | 2019-2021
+- Analyzed clinical trial data using SAS
+- Created patient cohort identification algorithms""",
+        "education": "M.S. Biostatistics, Johns Hopkins\nB.S. Biology, UCLA"
+    },
+    {
+        "name": "Oliver Smith",
+        "email": "oliver.smith@email.com",
+        "phone": "+1-555-0115",
+        "summary": "Fresh graduate looking for entry-level position. Completed several online courses in data science.",
+        "skills": "Python basics, Excel, PowerPoint, Learning SQL, Interested in Machine Learning, Statistics coursework",
+        "experience": """Intern | Local Business | Summer 2023
+- Helped organize spreadsheet data
+- Created basic charts in Excel
+- Learned about business operations
+
+Student Projects
+- Completed Kaggle Titanic competition
+- Built simple linear regression model""",
+        "education": "B.A. Economics, State College\nOnline: DataCamp Python Course"
+    },
+    {
+        "name": "Patricia Rodriguez",
+        "email": "patricia.rodriguez@email.com",
+        "phone": "+1-555-0116",
+        "summary": "Senior MLOps Engineer with 5 years of experience deploying and scaling machine learning systems in production.",
+        "skills": "Python, Kubernetes, Docker, AWS, GCP, MLflow, Kubeflow, Terraform, CI/CD, Jenkins, Git, Linux, Monitoring, Prometheus, Grafana",
+        "experience": """Staff MLOps Engineer | Stripe | 2021-Present
+- Built ML platform serving 1000+ models in production
+- Reduced model deployment time from days to hours
+- Implemented automated model monitoring and retraining
+
+DevOps Engineer | Lyft | 2019-2021
+- Managed Kubernetes clusters for ML workloads
+- Created CI/CD pipelines for data science teams""",
+        "education": "M.S. Computer Science, Georgia Tech\nB.S. Software Engineering, Texas A&M"
+    },
+    {
+        "name": "Quincy Adams",
+        "email": "quincy.adams@email.com",
+        "phone": "+1-555-0117",
+        "summary": "Retail manager with no technical background. Interested in understanding data but no programming skills.",
+        "skills": "Customer Service, Team Management, Sales, Inventory Management, Microsoft Office, Communication, Leadership",
+        "experience": """Store Manager | Retail Chain | 2018-Present
+- Managed team of 15 employees
+- Increased store sales by 20%
+- Handled customer complaints and returns
+
+Assistant Manager | Same Retailer | 2015-2018
+- Supervised daily operations
+- Trained new employees""",
+        "education": "High School Diploma\nSome community college courses"
+    },
+    {
+        "name": "Rachel Kim",
+        "email": "rachel.kim@email.com",
+        "phone": "+1-555-0118",
+        "summary": "Statistician transitioning to Data Science with 6 years of statistical consulting experience and growing ML skills.",
+        "skills": "R, Python, SAS, SPSS, Statistical Modeling, Hypothesis Testing, Regression, Bayesian Methods, Experimental Design, SQL, Basic ML",
+        "experience": """Senior Statistician | Pharmaceutical Company | 2019-Present
+- Designed and analyzed clinical trials
+- Built statistical models for drug efficacy
+- Learning Python and machine learning techniques
+
+Statistical Consultant | Research Firm | 2017-2019
+- Provided statistical analysis for academic clients
+- Created survey sampling methodologies""",
+        "education": "M.S. Statistics, University of Michigan\nB.S. Mathematics, Purdue University"
+    },
+    {
+        "name": "Samuel Torres",
+        "email": "samuel.torres@email.com",
+        "phone": "+1-555-0119",
+        "summary": "Data Science Manager with 10 years of experience leading analytics teams and delivering business impact through ML solutions.",
+        "skills": "Python, SQL, Leadership, Strategy, Stakeholder Management, ML, Deep Learning, Team Building, Agile, Product Sense, Communication",
+        "experience": """Director of Data Science | Fortune 500 Company | 2020-Present
+- Led team of 20 data scientists and ML engineers
+- Delivered $100M+ annual impact through ML initiatives
+- Defined 3-year data science roadmap
+
+Senior Manager | Consulting Firm | 2016-2020
+- Built data science practice from ground up
+- Managed client engagements worth $5M+""",
+        "education": "MBA, Harvard Business School\nM.S. Computer Science, Cornell\nB.S. Engineering, Duke"
+    },
+    {
+        "name": "Tanya White",
+        "email": "tanya.white@email.com",
+        "phone": "+1-555-0120",
+        "summary": "Freelance web designer with creative skills but no data or programming experience beyond basic HTML.",
+        "skills": "Photoshop, Illustrator, Figma, UI/UX Design, HTML basics, CSS basics, Creativity, Client Communication",
+        "experience": """Freelance Designer | Self-employed | 2019-Present
+- Designed websites for small businesses
+- Created brand identities and logos
+- Worked with 50+ clients
+
+Junior Designer | Design Studio | 2017-2019
+- Assisted senior designers on projects
+- Created social media graphics""",
+        "education": "Associate Degree in Graphic Design"
     }
 ]
 

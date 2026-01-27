@@ -7,6 +7,7 @@ from pathlib import Path
 from groq import Groq
 import PyPDF2
 import io
+import pandas as pd
 from dotenv import load_dotenv
 from docx import Document
 
@@ -132,39 +133,6 @@ st.markdown("""
         border-radius: 16px;
     }
 
-    /* Upload area */
-    .upload-area {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 2rem;
-        text-align: center;
-    }
-
-    .upload-icon {
-        width: 60px;
-        height: 60px;
-        background: #f3f4f6;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 1rem;
-        font-size: 24px;
-    }
-
-    .upload-title {
-        font-weight: 600;
-        color: #1f2937;
-        margin-bottom: 0.25rem;
-    }
-
-    .upload-subtitle {
-        color: #9ca3af;
-        font-size: 0.85rem;
-    }
-
     /* File chip */
     .file-chip {
         display: inline-flex;
@@ -177,28 +145,6 @@ st.markdown("""
         margin: 0.25rem;
         font-size: 0.85rem;
         color: #374151;
-    }
-
-    /* Analyze button */
-    .analyze-btn {
-        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-        color: white;
-        border: none;
-        padding: 0.875rem 2rem;
-        border-radius: 12px;
-        font-weight: 600;
-        font-size: 1rem;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        transition: all 0.2s;
-        box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
-    }
-
-    .analyze-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(124, 58, 237, 0.35);
     }
 
     /* Results section */
@@ -227,81 +173,6 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Candidate card */
-    .candidate-card {
-        background: white;
-        border-radius: 16px;
-        padding: 1.5rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        border: 1px solid #f3f4f6;
-        transition: all 0.2s;
-        height: 100%;
-    }
-
-    .candidate-card:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        transform: translateY(-2px);
-    }
-
-    /* Score circle */
-    .score-circle {
-        width: 70px;
-        height: 70px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.25rem;
-        font-weight: 700;
-        margin-right: 1rem;
-    }
-
-    .score-high {
-        background: conic-gradient(#8b5cf6 var(--score-percent), #e5e7eb var(--score-percent));
-        position: relative;
-    }
-
-    .score-inner {
-        width: 54px;
-        height: 54px;
-        background: white;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #1f2937;
-    }
-
-    /* Badges */
-    .badge {
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        display: inline-block;
-    }
-
-    .badge-best {
-        background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
-        color: #7c3aed;
-        border: 1px solid #c4b5fd;
-    }
-
-    .badge-strong {
-        background: #dcfce7;
-        color: #166534;
-    }
-
-    .badge-average {
-        background: #fef3c7;
-        color: #92400e;
-    }
-
-    .badge-weak {
-        background: #fee2e2;
-        color: #991b1b;
-    }
-
     /* Category section headers */
     .category-header {
         display: flex;
@@ -325,124 +196,38 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Small candidate placards */
-    .candidate-placard {
-        background: white;
-        border-radius: 12px;
-        padding: 1rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        border: 1px solid #e5e7eb;
-        transition: all 0.2s;
-        margin-bottom: 0.75rem;
-    }
-
-    .candidate-placard:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        border-color: #ddd6fe;
-    }
-
-    .placard-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 0.5rem;
-    }
-
-    .placard-score {
-        width: 50px;
-        height: 50px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 0.95rem;
-        color: white;
-    }
-
-    .placard-info {
-        flex: 1;
-        margin-left: 0.75rem;
-    }
-
-    .placard-name {
-        font-weight: 600;
-        color: #1f2937;
-        font-size: 0.95rem;
-    }
-
-    .placard-role {
-        font-size: 0.8rem;
-        color: #6b7280;
-    }
-
-    .placard-contact {
-        display: flex;
-        gap: 1rem;
-        margin-top: 0.5rem;
-        font-size: 0.75rem;
-        color: #6b7280;
-    }
-
-    .placard-contact span {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-    }
-
     /* Skill tags */
-    .skill-tag {
+    .skill-matched {
         display: inline-block;
-        background: #f3f4f6;
-        color: #374151;
-        padding: 0.375rem 0.75rem;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        margin: 0.2rem;
-        border: 1px solid #e5e7eb;
+        background: #dcfce7;
+        color: #166534;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        margin: 0.1rem;
+        border: 1px solid #bbf7d0;
     }
 
-    .skill-tag-matched {
-        background: #ede9fe;
-        color: #7c3aed;
-        border-color: #ddd6fe;
+    .skill-missing {
+        display: inline-block;
+        background: #fee2e2;
+        color: #991b1b;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        margin: 0.1rem;
+        border: 1px solid #fecaca;
     }
 
-    /* Candidate name and info */
-    .candidate-name {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #1f2937;
-        margin-bottom: 0.25rem;
-    }
-
-    .candidate-role {
-        font-size: 0.85rem;
-        color: #6b7280;
-    }
-
-    /* Summary text */
-    .candidate-summary {
-        color: #6b7280;
-        font-size: 0.9rem;
-        line-height: 1.5;
-        margin: 1rem 0;
-    }
-
-    /* View full analysis link */
-    .view-link {
-        color: #7c3aed;
-        font-weight: 500;
-        font-size: 0.9rem;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        cursor: pointer;
-        text-decoration: none;
-    }
-
-    .view-link:hover {
-        text-decoration: underline;
+    .skill-nice {
+        display: inline-block;
+        background: #e0e7ff;
+        color: #3730a3;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        margin: 0.1rem;
+        border: 1px solid #c7d2fe;
     }
 
     /* Section labels */
@@ -453,18 +238,6 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 0.05em;
         margin-bottom: 0.5rem;
-    }
-
-    /* Auto-generate button */
-    .auto-gen-btn {
-        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        font-size: 0.8rem;
-        font-weight: 600;
-        cursor: pointer;
     }
 
     /* Custom streamlit overrides */
@@ -513,10 +286,16 @@ st.markdown("""
         background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
     }
 
-    /* Expander styling */
-    .streamlit-expanderHeader {
-        background: #f9fafb;
-        border-radius: 8px;
+    /* Keyword tags */
+    .keyword-tag {
+        display: inline-block;
+        background: #ede9fe;
+        color: #7c3aed;
+        padding: 0.3rem 0.6rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        margin: 0.2rem;
+        border: 1px solid #ddd6fe;
     }
 
     /* User profile in sidebar */
@@ -551,14 +330,6 @@ st.markdown("""
         font-size: 0.75rem;
         color: #8b5cf6;
     }
-
-    /* Card container for results */
-    .results-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        gap: 1.5rem;
-        margin-top: 1rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -573,6 +344,10 @@ if 'duplicates_count' not in st.session_state:
     st.session_state.duplicates_count = 0
 if 'total_files_processed' not in st.session_state:
     st.session_state.total_files_processed = 0
+if 'suggested_keywords' not in st.session_state:
+    st.session_state.suggested_keywords = []
+if 'job_title' not in st.session_state:
+    st.session_state.job_title = ""
 
 def extract_text_from_pdf(pdf_file):
     """Extract text from uploaded PDF file"""
@@ -606,7 +381,6 @@ def extract_text_from_docx(docx_file):
         text = ""
         for para in doc.paragraphs:
             text += para.text + " "
-        # Also extract from tables
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
@@ -623,7 +397,6 @@ def extract_text_from_docx_path(docx_path):
         text = ""
         for para in doc.paragraphs:
             text += para.text + " "
-        # Also extract from tables
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
@@ -635,36 +408,95 @@ def extract_text_from_docx_path(docx_path):
 
 def get_content_hash(text):
     """Generate hash of resume content for duplicate detection"""
-    # Normalize text: lowercase, remove extra spaces
     normalized = re.sub(r'\s+', ' ', text.lower().strip())
     return hashlib.md5(normalized.encode()).hexdigest()
 
-def analyze_resume(client, resume_text, job_description, candidate_name):
-    """Analyze a single resume against job description using Groq"""
+def extract_keywords_from_jd(client, job_description):
+    """Extract suggested keywords from job description using AI"""
+    prompt = f"""Analyze the following job description and extract key skills, technologies, and qualifications.
+
+Return ONLY valid JSON in this exact format:
+{{
+    "job_title": "<extracted job title>",
+    "must_have_skills": ["skill1", "skill2", "skill3"],
+    "nice_to_have_skills": ["skill1", "skill2"],
+    "technologies": ["tech1", "tech2"],
+    "qualifications": ["qual1", "qual2"],
+    "experience_required": "<e.g., 3-5 years>"
+}}
+
+JOB DESCRIPTION:
+{job_description[:3000]}
+
+Return ONLY the JSON object."""
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=800
+        )
+        result_text = response.choices[0].message.content.strip()
+
+        if "```json" in result_text:
+            result_text = result_text.split("```json")[1].split("```")[0]
+        elif "```" in result_text:
+            result_text = result_text.split("```")[1].split("```")[0]
+
+        return json.loads(result_text)
+    except:
+        return {"job_title": "", "must_have_skills": [], "nice_to_have_skills": [], "technologies": [], "qualifications": [], "experience_required": ""}
+
+def analyze_resume(client, resume_text, job_description, nice_to_have_skills, candidate_name, job_title):
+    """Analyze a single resume against job description using Groq with improved scoring"""
+
+    nice_to_have_text = ", ".join(nice_to_have_skills) if nice_to_have_skills else "None specified"
+
     prompt = f"""You are an expert technical recruiter with 15 years of experience.
-Evaluate the following resume against the job description.
+Evaluate the following resume against the job description with STRICT and ACCURATE scoring.
+
+SCORING CRITERIA (Be precise and fair):
+- Must-Have Skills Match: 40% weight (each missing critical skill = -10 points)
+- Experience Relevance: 25% weight (years + role alignment)
+- Nice-to-Have Skills: 15% weight (bonus points for having these)
+- Education/Certifications: 10% weight
+- Overall Presentation: 10% weight
 
 IMPORTANT: Return ONLY valid JSON, no other text. Use this exact structure:
 {{
-    "fit_score": <number 0-100>,
+    "fit_score": <number 0-100 based on above criteria>,
     "email": "<extracted email or 'Not provided'>",
     "phone": "<extracted phone number or 'Not provided'>",
+    "location": "<extracted city/location or 'Not provided'>",
     "skills_matched": ["skill1", "skill2", "skill3"],
     "skills_missing": ["skill1", "skill2"],
+    "nice_to_have_matched": ["skill1", "skill2"],
     "current_role": "<extracted current job title or 'Not specified'>",
     "experience_years": <number or 0>,
     "strengths": ["strength1", "strength2", "strength3"],
     "weaknesses": ["weakness1", "weakness2"],
     "summary": "<2-3 sentence evaluation>",
     "verdict": "<Best Fit OR Strong Fit OR Average OR Not a Fit>",
-    "recommendation": "<Recommend for Interview OR Consider for Interview OR Do Not Recommend>"
+    "recommendation": "<Recommend for Interview OR Consider for Interview OR Do Not Recommend>",
+    "score_breakdown": {{
+        "skills_score": <0-40>,
+        "experience_score": <0-25>,
+        "nice_to_have_score": <0-15>,
+        "education_score": <0-10>,
+        "presentation_score": <0-10>
+    }}
 }}
 
-Verdict Guidelines:
-- Best Fit (90-100): Exceeds all requirements, ideal candidate
-- Strong Fit (70-89): Meets most requirements, good candidate
-- Average (50-69): Meets some requirements, potential with training
-- Not a Fit (0-49): Does not meet key requirements
+Verdict Guidelines (STRICT):
+- Best Fit (85-100): Exceeds requirements, has most must-have skills + nice-to-have
+- Strong Fit (70-84): Meets most requirements, minor gaps
+- Average (50-69): Meets some requirements, needs training
+- Not a Fit (0-49): Missing critical requirements
+
+JOB TITLE: {job_title}
+
+NICE-TO-HAVE SKILLS: {nice_to_have_text}
 
 RESUME:
 {resume_text[:4000]}
@@ -678,8 +510,8 @@ Return ONLY the JSON object, nothing else."""
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=1000
+            temperature=0.2,
+            max_tokens=1200
         )
         result_text = response.choices[0].message.content.strip()
 
@@ -690,15 +522,19 @@ Return ONLY the JSON object, nothing else."""
 
         result = json.loads(result_text)
         result['candidate_name'] = candidate_name
+        result['job_title'] = job_title
         return result
     except json.JSONDecodeError as e:
         return {
             "candidate_name": candidate_name,
+            "job_title": job_title,
             "fit_score": 0,
             "email": "Not provided",
             "phone": "Not provided",
+            "location": "Not provided",
             "skills_matched": [],
             "skills_missing": [],
+            "nice_to_have_matched": [],
             "current_role": "Unknown",
             "experience_years": 0,
             "strengths": [],
@@ -711,26 +547,19 @@ Return ONLY the JSON object, nothing else."""
     except Exception as e:
         return {
             "candidate_name": candidate_name,
+            "job_title": job_title,
             "fit_score": 0,
             "email": "Not provided",
             "phone": "Not provided",
+            "location": "Not provided",
             "current_role": "Unknown",
             "skills_matched": [],
             "skills_missing": [],
+            "nice_to_have_matched": [],
             "error": str(e),
             "verdict": "Error",
             "summary": f"API Error: {str(e)}"
         }
-
-def get_badge_class(verdict):
-    if "Best" in verdict:
-        return "badge-best"
-    elif "Strong" in verdict:
-        return "badge-strong"
-    elif "Average" in verdict:
-        return "badge-average"
-    else:
-        return "badge-weak"
 
 def get_category_color(category):
     colors = {
@@ -741,9 +570,34 @@ def get_category_color(category):
     }
     return colors.get(category, ("#6b7280", "#f3f4f6"))
 
+def create_excel_report(results, categories, total_files, duplicates, job_title):
+    """Create Excel report with all candidate data"""
+    data = []
+    for result in results:
+        data.append({
+            "Candidate Name": result.get('candidate_name', 'Unknown'),
+            "Fit Score": result.get('fit_score', 0),
+            "Verdict": result.get('verdict', 'N/A'),
+            "Job Title Applied": job_title,
+            "Current Role": result.get('current_role', 'N/A'),
+            "Experience (Years)": result.get('experience_years', 0),
+            "Location": result.get('location', 'Not provided'),
+            "Email": result.get('email', 'Not provided'),
+            "Phone": result.get('phone', 'Not provided'),
+            "Skills Matched": ", ".join(result.get('skills_matched', [])),
+            "Skills Missing": ", ".join(result.get('skills_missing', [])),
+            "Nice-to-Have Skills": ", ".join(result.get('nice_to_have_matched', [])),
+            "Strengths": ", ".join(result.get('strengths', [])),
+            "Weaknesses": ", ".join(result.get('weaknesses', [])),
+            "Summary": result.get('summary', 'N/A'),
+            "Recommendation": result.get('recommendation', 'N/A')
+        })
+
+    df = pd.DataFrame(data)
+    return df
+
 # Sidebar
 with st.sidebar:
-    # Brand
     st.markdown("""
     <div class="brand-container">
         <div class="brand-icon">🎯</div>
@@ -754,7 +608,6 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # Navigation
     st.markdown("""
     <div class="nav-item active">
         <span>📊</span>
@@ -772,7 +625,6 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # API Status
     st.markdown('<p class="section-label">API Status</p>', unsafe_allow_html=True)
     if GROQ_API_KEY and GROQ_API_KEY != "your_groq_api_key_here":
         st.markdown("""
@@ -790,12 +642,9 @@ with st.sidebar:
         """, unsafe_allow_html=True)
 
     st.markdown("---")
-
-    # Help section
     st.markdown('<p class="section-label">Quick Links</p>', unsafe_allow_html=True)
     st.markdown("[🔗 Get Free API Key](https://console.groq.com)")
 
-    # User profile at bottom
     st.markdown("---")
     st.markdown("""
     <div class="user-profile">
@@ -817,7 +666,6 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown('<p class="section-label">Source Files</p>', unsafe_allow_html=True)
 
-    # Upload method selection
     upload_method = st.radio(
         "Upload Method",
         ["📄 Upload Files", "📁 Select Folder"],
@@ -826,7 +674,6 @@ with col1:
     )
 
     uploaded_files = []
-    folder_files = []
 
     if upload_method == "📄 Upload Files":
         uploaded_files = st.file_uploader(
@@ -846,7 +693,7 @@ with col1:
                 file_chips += f'<span class="file-chip">+{len(uploaded_files)-3} others</span>'
             st.markdown(file_chips, unsafe_allow_html=True)
 
-    else:  # Folder selection
+    else:
         st.markdown("""
         <div style="background: #f9fafb; border: 2px dashed #ddd6fe; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
             <p style="color: #6b7280; font-size: 0.9rem; margin: 0;">
@@ -864,7 +711,6 @@ with col1:
         if folder_path:
             folder_path = Path(folder_path)
             if folder_path.exists() and folder_path.is_dir():
-                # Find PDF and DOCX files
                 resume_files = (
                     list(folder_path.glob("*.pdf")) +
                     list(folder_path.glob("*.PDF")) +
@@ -878,11 +724,8 @@ with col1:
                     pdf_count = len([f for f in resume_files if f.suffix.lower() == '.pdf'])
                     docx_count = len([f for f in resume_files if f.suffix.lower() in ['.docx', '.doc']])
                     st.success(f"✅ Found {len(resume_files)} files ({pdf_count} PDF, {docx_count} DOCX/DOC)")
-
-                    # Store folder files info in session state
                     st.session_state.folder_pdf_paths = resume_files
 
-                    # Show preview
                     file_chips = ""
                     for f in resume_files[:3]:
                         file_chips += f'<span class="file-chip">📄 {f.name}</span>'
@@ -890,7 +733,6 @@ with col1:
                         file_chips += f'<span class="file-chip">+{len(resume_files)-3} others</span>'
                     st.markdown(file_chips, unsafe_allow_html=True)
 
-                    # Option to include subfolders
                     include_subfolders = st.checkbox("Include subfolders", value=False)
                     if include_subfolders:
                         resume_files = (
@@ -914,10 +756,60 @@ with col2:
     st.markdown('<p class="section-label">Job Description</p>', unsafe_allow_html=True)
     job_description = st.text_area(
         "Job Description",
-        height=200,
+        height=150,
         placeholder="Enter the job description here...\n\nInclude:\n- Role title\n- Required skills\n- Experience requirements\n- Responsibilities",
         label_visibility="collapsed"
     )
+
+    # Nice to Have Skills input (Feature 1)
+    st.markdown('<p class="section-label">Nice-to-Have Skills (Optional)</p>', unsafe_allow_html=True)
+    nice_to_have_input = st.text_input(
+        "Nice-to-Have Skills",
+        placeholder="e.g., AWS, Docker, Kubernetes, GraphQL (comma-separated)",
+        label_visibility="collapsed"
+    )
+    nice_to_have_skills = [s.strip() for s in nice_to_have_input.split(",") if s.strip()] if nice_to_have_input else []
+
+# Feature 6: Suggest Keywords Button
+if job_description and GROQ_API_KEY:
+    col_kw1, col_kw2, col_kw3 = st.columns([1, 1, 1])
+    with col_kw2:
+        if st.button("🔍 Extract Keywords from JD", use_container_width=True):
+            with st.spinner("Analyzing job description..."):
+                client = Groq(api_key=GROQ_API_KEY)
+                keywords = extract_keywords_from_jd(client, job_description)
+                st.session_state.suggested_keywords = keywords
+                st.session_state.job_title = keywords.get('job_title', '')
+
+# Display suggested keywords
+if st.session_state.suggested_keywords:
+    keywords = st.session_state.suggested_keywords
+    st.markdown("---")
+    st.markdown("### 📋 Suggested Keywords from JD")
+
+    kw_col1, kw_col2 = st.columns(2)
+
+    with kw_col1:
+        if keywords.get('job_title'):
+            st.markdown(f"**Job Title:** {keywords['job_title']}")
+        if keywords.get('experience_required'):
+            st.markdown(f"**Experience Required:** {keywords['experience_required']}")
+
+        if keywords.get('must_have_skills'):
+            st.markdown("**Must-Have Skills:**")
+            skills_html = "".join([f'<span class="keyword-tag">{s}</span>' for s in keywords['must_have_skills']])
+            st.markdown(skills_html, unsafe_allow_html=True)
+
+    with kw_col2:
+        if keywords.get('nice_to_have_skills'):
+            st.markdown("**Nice-to-Have Skills:**")
+            skills_html = "".join([f'<span class="keyword-tag">{s}</span>' for s in keywords['nice_to_have_skills']])
+            st.markdown(skills_html, unsafe_allow_html=True)
+
+        if keywords.get('technologies'):
+            st.markdown("**Technologies:**")
+            tech_html = "".join([f'<span class="keyword-tag">{t}</span>' for t in keywords['technologies']])
+            st.markdown(tech_html, unsafe_allow_html=True)
 
 # Analyze button
 st.markdown("<br>", unsafe_allow_html=True)
@@ -927,7 +819,6 @@ with col_btn2:
 
 # Process analysis
 if analyze_clicked:
-    # Determine which files to process
     files_to_process = []
     use_folder = upload_method == "📁 Select Folder"
 
@@ -936,6 +827,13 @@ if analyze_clicked:
         files_to_process = folder_paths
     else:
         files_to_process = uploaded_files if uploaded_files else []
+
+    # Get job title
+    job_title = st.session_state.get('job_title', '')
+    if not job_title and st.session_state.suggested_keywords:
+        job_title = st.session_state.suggested_keywords.get('job_title', 'Not specified')
+    if not job_title:
+        job_title = "Not specified"
 
     if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":
         st.error("⚠️ API key not configured. Please add your Groq API key to the .env file")
@@ -952,24 +850,21 @@ if analyze_clicked:
             duplicate_info = st.empty()
 
             results = []
-            seen_hashes = {}  # For duplicate detection
+            seen_hashes = {}
             duplicates_skipped = 0
             total = len(files_to_process)
 
-            # Show estimate for large batches
             if total > 10:
-                est_time = total * 2  # ~2 seconds per resume
+                est_time = total * 2
                 time_estimate.info(f"⏱️ Estimated time: {est_time // 60}m {est_time % 60}s for {total} resumes")
 
             for idx, file_item in enumerate(files_to_process):
                 if use_folder:
-                    # Processing from folder path
                     file_path = file_item
                     file_name = file_path.name
                     file_ext = file_path.suffix.lower()
                     status_text.text(f"🔍 Analyzing {file_name}... ({idx + 1}/{total})")
 
-                    # Extract text based on file type
                     if file_ext == '.pdf':
                         resume_text = extract_text_from_pdf_path(file_path)
                     elif file_ext in ['.docx', '.doc']:
@@ -977,12 +872,10 @@ if analyze_clicked:
                     else:
                         resume_text = "Error: Unsupported file format"
                 else:
-                    # Processing uploaded file
                     file_name = file_item.name
                     file_ext = Path(file_name).suffix.lower()
                     status_text.text(f"🔍 Analyzing {file_name}... ({idx + 1}/{total})")
 
-                    # Extract text based on file type
                     if file_ext == '.pdf':
                         resume_text = extract_text_from_pdf(file_item)
                     elif file_ext in ['.docx', '.doc']:
@@ -990,7 +883,6 @@ if analyze_clicked:
                     else:
                         resume_text = "Error: Unsupported file format"
 
-                # Clean file name for display
                 clean_name = file_name
                 for ext in ['.pdf', '.PDF', '.docx', '.DOCX', '.doc', '.DOC']:
                     clean_name = clean_name.replace(ext, '')
@@ -998,30 +890,32 @@ if analyze_clicked:
                 if resume_text.startswith("Error"):
                     results.append({
                         "candidate_name": clean_name,
+                        "job_title": job_title,
                         "fit_score": 0,
                         "error": resume_text,
                         "verdict": "Error",
                         "current_role": "Unknown",
+                        "location": "Not provided",
                         "skills_matched": [],
                         "skills_missing": [],
+                        "nice_to_have_matched": [],
                         "summary": "Could not extract text from file"
                     })
                 else:
-                    # Check for duplicates using content hash
                     content_hash = get_content_hash(resume_text)
 
                     if content_hash in seen_hashes:
-                        # Duplicate found - skip
                         duplicates_skipped += 1
                         duplicate_info.warning(f"⚠️ Skipped {duplicates_skipped} duplicate(s) - '{file_name}' same as '{seen_hashes[content_hash]}'")
                     else:
-                        # New unique resume
                         seen_hashes[content_hash] = file_name
                         result = analyze_resume(
                             client,
                             resume_text,
                             job_description,
-                            clean_name
+                            nice_to_have_skills,
+                            clean_name,
+                            job_title
                         )
                         results.append(result)
 
@@ -1030,16 +924,15 @@ if analyze_clicked:
             results.sort(key=lambda x: x.get('fit_score', 0), reverse=True)
             st.session_state.results = results
             st.session_state.analyzed = True
+            st.session_state.job_title = job_title
 
             status_text.empty()
             progress_bar.empty()
             time_estimate.empty()
 
-            # Store counts in session state for display after rerun
             st.session_state.duplicates_count = duplicates_skipped
             st.session_state.total_files_processed = total
 
-            # Show final duplicate summary
             if duplicates_skipped > 0:
                 duplicate_info.success(f"✅ Processed {len(results)} unique resumes. Skipped {duplicates_skipped} duplicate(s).")
             else:
@@ -1053,23 +946,65 @@ if analyze_clicked:
 # Display results
 if st.session_state.analyzed and st.session_state.results:
     results = st.session_state.results
+    job_title = st.session_state.get('job_title', 'Not specified')
 
-    # Results header
     st.markdown("---")
+
+    # Feature 3: Job Designation Display
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); padding: 1rem 1.5rem; border-radius: 12px; margin-bottom: 1rem;">
+        <div style="color: white; font-size: 0.8rem; opacity: 0.9;">Analyzing for Position</div>
+        <div style="color: white; font-size: 1.25rem; font-weight: 700;">{job_title}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Feature 7: Filter Section
+    st.markdown("### 🔍 Filter Results")
+    filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
+
+    with filter_col1:
+        filter_verdict = st.multiselect(
+            "Verdict",
+            ["Best Fit", "Strong Fit", "Average", "Not a Fit"],
+            default=["Best Fit", "Strong Fit", "Average", "Not a Fit"]
+        )
+
+    with filter_col2:
+        min_score = st.slider("Minimum Score", 0, 100, 0)
+
+    with filter_col3:
+        # Get unique locations
+        all_locations = list(set([r.get('location', 'Not provided') for r in results]))
+        filter_location = st.multiselect("Location", all_locations, default=all_locations)
+
+    with filter_col4:
+        # Get all skills for filtering
+        all_skills = set()
+        for r in results:
+            all_skills.update(r.get('skills_matched', []))
+        filter_skills = st.multiselect("Has Skill", list(all_skills))
+
+    # Apply filters
+    filtered_results = [
+        r for r in results
+        if r.get('verdict', 'Not a Fit') in filter_verdict
+        and r.get('fit_score', 0) >= min_score
+        and r.get('location', 'Not provided') in filter_location
+        and (not filter_skills or any(s in r.get('skills_matched', []) for s in filter_skills))
+    ]
+
     st.markdown(f"""
     <div class="results-header">
         <div class="results-title">
-            Results <span class="match-count">{len(results)} Candidates</span>
+            Results <span class="match-count">{len(filtered_results)} of {len(results)} Candidates</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Get duplicate count from session state
     total_files = st.session_state.get('total_files_processed', len(results))
     duplicates = st.session_state.get('duplicates_count', 0)
-    unique_count = len(results)
 
-    # Categorize results
+    # Categorize filtered results
     categories = {
         "Best Fit": [],
         "Strong Fit": [],
@@ -1077,7 +1012,7 @@ if st.session_state.analyzed and st.session_state.results:
         "Not a Fit": []
     }
 
-    for result in results:
+    for result in filtered_results:
         verdict = result.get('verdict', 'Not a Fit')
         if "Best" in verdict:
             categories["Best Fit"].append(result)
@@ -1135,7 +1070,6 @@ if st.session_state.analyzed and st.session_state.results:
 
         text_color, bg_color = get_category_color(category)
 
-        # Category header
         st.markdown(f"""
         <div class="category-header">
             <span class="category-title">{category}</span>
@@ -1145,7 +1079,6 @@ if st.session_state.analyzed and st.session_state.results:
         </div>
         """, unsafe_allow_html=True)
 
-        # Display candidates in a grid (3 columns)
         cols = st.columns(3)
         for idx, result in enumerate(category_results):
             col_idx = idx % 3
@@ -1153,17 +1086,18 @@ if st.session_state.analyzed and st.session_state.results:
             score = result.get('fit_score', 0)
             name = result.get('candidate_name', 'Unknown')
             role = result.get('current_role', 'Not specified')
+            location = result.get('location', 'Not provided')
             email = result.get('email', 'Not provided')
             phone = result.get('phone', 'Not provided')
             summary = result.get('summary', 'N/A')
             matched = result.get('skills_matched', [])
             missing = result.get('skills_missing', [])
+            nice_matched = result.get('nice_to_have_matched', [])
             strengths = result.get('strengths', [])
             weaknesses = result.get('weaknesses', [])
             recommendation = result.get('recommendation', 'N/A')
 
-            # Score color
-            if score >= 90:
+            if score >= 85:
                 score_bg = "#7c3aed"
             elif score >= 70:
                 score_bg = "#059669"
@@ -1173,7 +1107,7 @@ if st.session_state.analyzed and st.session_state.results:
                 score_bg = "#dc2626"
 
             with cols[col_idx]:
-                # Candidate card
+                # Candidate card with Location (Feature 2)
                 st.markdown(f"""
                 <div style="background: white; border-radius: 12px; padding: 1rem; border: 1px solid #e5e7eb; border-left: 4px solid {score_bg}; margin-bottom: 0.5rem;">
                     <div style="display: flex; align-items: center; gap: 10px;">
@@ -1184,30 +1118,31 @@ if st.session_state.analyzed and st.session_state.results:
                         </div>
                     </div>
                     <div style="margin-top: 0.5rem; font-size: 0.7rem; color: #6b7280;">
+                        <div>📍 {location}</div>
                         <div>📧 {email if email != 'Not provided' else 'N/A'}</div>
                         <div>📱 {phone if phone != 'Not provided' else 'N/A'}</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-                # Compact collapsable analysis using expander
                 with st.expander("📊 View Analysis"):
-                    # Skills in two columns
-                    sk1, sk2 = st.columns(2)
-                    with sk1:
-                        st.caption("✅ **Matched Skills**")
-                        if matched:
-                            st.write(", ".join(matched[:5]) + ("..." if len(matched) > 5 else ""))
-                        else:
-                            st.write("None")
-                    with sk2:
-                        st.caption("❌ **Missing Skills**")
-                        if missing:
-                            st.write(", ".join(missing[:5]) + ("..." if len(missing) > 5 else ""))
-                        else:
-                            st.write("None")
+                    # Feature 4: Highlighted Skills with colored tags
+                    st.caption("**Skills Analysis**")
 
-                    # Strengths & Weaknesses
+                    if matched:
+                        matched_html = "".join([f'<span class="skill-matched">✓ {s}</span>' for s in matched[:6]])
+                        st.markdown(f"**Matched:** {matched_html}", unsafe_allow_html=True)
+
+                    if missing:
+                        missing_html = "".join([f'<span class="skill-missing">✗ {s}</span>' for s in missing[:6]])
+                        st.markdown(f"**Missing:** {missing_html}", unsafe_allow_html=True)
+
+                    if nice_matched:
+                        nice_html = "".join([f'<span class="skill-nice">★ {s}</span>' for s in nice_matched[:4]])
+                        st.markdown(f"**Nice-to-Have:** {nice_html}", unsafe_allow_html=True)
+
+                    st.markdown("---")
+
                     sw1, sw2 = st.columns(2)
                     with sw1:
                         st.caption("💪 **Strengths**")
@@ -1230,35 +1165,86 @@ if st.session_state.analyzed and st.session_state.results:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-    # Download report
+    # Feature 5: Download reports section
     st.markdown("---")
-    report_text = "AI RESUME SHORTLISTING REPORT\n" + "="*50 + "\n\n"
-    report_text += "PROCESSING SUMMARY\n"
-    report_text += f"Total Files Uploaded: {total_files}\n"
-    report_text += f"Unique Resumes Analyzed: {unique_count}\n"
-    report_text += f"Duplicates Skipped: {duplicates}\n\n"
-    report_text += "RESULTS BREAKDOWN\n"
-    report_text += f"Total Candidates: {len(results)}\n"
-    report_text += f"Best Fit: {len(categories['Best Fit'])}\n"
-    report_text += f"Strong Fit: {len(categories['Strong Fit'])}\n"
-    report_text += f"Average: {len(categories['Average'])}\n"
-    report_text += f"Not a Fit: {len(categories['Not a Fit'])}\n\n"
-    report_text += "="*50 + "\n\n"
+    st.markdown("### 📥 Download Reports")
 
-    for category, category_results in categories.items():
-        if category_results:
-            report_text += f"\n--- {category.upper()} ---\n\n"
-            for result in category_results:
-                report_text += f"Name: {result.get('candidate_name', 'Unknown')}\n"
-                report_text += f"Score: {result.get('fit_score', 0)}/100\n"
-                report_text += f"Role: {result.get('current_role', 'N/A')}\n"
-                report_text += f"Email: {result.get('email', 'N/A')}\n"
-                report_text += f"Phone: {result.get('phone', 'N/A')}\n"
-                report_text += f"Summary: {result.get('summary', 'N/A')}\n"
-                report_text += f"Recommendation: {result.get('recommendation', 'N/A')}\n"
-                report_text += "-"*30 + "\n\n"
+    download_col1, download_col2, download_col3 = st.columns(3)
 
-    st.download_button("📄 Download Full Report", report_text, "resume_analysis_report.txt", "text/plain")
+    # Create DataFrame for Excel/CSV
+    df = create_excel_report(results, categories, total_files, duplicates, job_title)
+
+    with download_col1:
+        # CSV Download
+        csv_data = df.to_csv(index=False)
+        st.download_button(
+            "📄 Download CSV",
+            csv_data,
+            "resume_analysis_report.csv",
+            "text/csv",
+            use_container_width=True
+        )
+
+    with download_col2:
+        # Excel Download
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='All Candidates')
+
+            # Add separate sheets for each category
+            for cat_name, cat_results in categories.items():
+                if cat_results:
+                    cat_df = create_excel_report(cat_results, {}, 0, 0, job_title)
+                    cat_df.to_excel(writer, index=False, sheet_name=cat_name[:31])
+
+        excel_buffer.seek(0)
+        st.download_button(
+            "📊 Download Excel",
+            excel_buffer,
+            "resume_analysis_report.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+    with download_col3:
+        # Text Report
+        report_text = "AI RESUME SHORTLISTING REPORT\n" + "="*50 + "\n\n"
+        report_text += f"JOB TITLE: {job_title}\n\n"
+        report_text += "PROCESSING SUMMARY\n"
+        report_text += f"Total Files Uploaded: {total_files}\n"
+        report_text += f"Unique Resumes Analyzed: {len(results)}\n"
+        report_text += f"Duplicates Skipped: {duplicates}\n\n"
+        report_text += "RESULTS BREAKDOWN\n"
+        report_text += f"Best Fit: {len(categories['Best Fit'])}\n"
+        report_text += f"Strong Fit: {len(categories['Strong Fit'])}\n"
+        report_text += f"Average: {len(categories['Average'])}\n"
+        report_text += f"Not a Fit: {len(categories['Not a Fit'])}\n\n"
+        report_text += "="*50 + "\n\n"
+
+        for category, category_results in categories.items():
+            if category_results:
+                report_text += f"\n--- {category.upper()} ---\n\n"
+                for result in category_results:
+                    report_text += f"Name: {result.get('candidate_name', 'Unknown')}\n"
+                    report_text += f"Score: {result.get('fit_score', 0)}/100\n"
+                    report_text += f"Role: {result.get('current_role', 'N/A')}\n"
+                    report_text += f"Location: {result.get('location', 'N/A')}\n"
+                    report_text += f"Email: {result.get('email', 'N/A')}\n"
+                    report_text += f"Phone: {result.get('phone', 'N/A')}\n"
+                    report_text += f"Matched Skills: {', '.join(result.get('skills_matched', []))}\n"
+                    report_text += f"Missing Skills: {', '.join(result.get('skills_missing', []))}\n"
+                    report_text += f"Nice-to-Have: {', '.join(result.get('nice_to_have_matched', []))}\n"
+                    report_text += f"Summary: {result.get('summary', 'N/A')}\n"
+                    report_text += f"Recommendation: {result.get('recommendation', 'N/A')}\n"
+                    report_text += "-"*30 + "\n\n"
+
+        st.download_button(
+            "📝 Download TXT",
+            report_text,
+            "resume_analysis_report.txt",
+            "text/plain",
+            use_container_width=True
+        )
 
 # Footer
 st.markdown("""

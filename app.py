@@ -569,6 +569,10 @@ if 'analyzed' not in st.session_state:
     st.session_state.analyzed = False
 if 'folder_pdf_paths' not in st.session_state:
     st.session_state.folder_pdf_paths = []
+if 'duplicates_count' not in st.session_state:
+    st.session_state.duplicates_count = 0
+if 'total_files_processed' not in st.session_state:
+    st.session_state.total_files_processed = 0
 
 def extract_text_from_pdf(pdf_file):
     """Extract text from uploaded PDF file"""
@@ -1031,6 +1035,10 @@ if analyze_clicked:
             progress_bar.empty()
             time_estimate.empty()
 
+            # Store counts in session state for display after rerun
+            st.session_state.duplicates_count = duplicates_skipped
+            st.session_state.total_files_processed = total
+
             # Show final duplicate summary
             if duplicates_skipped > 0:
                 duplicate_info.success(f"✅ Processed {len(results)} unique resumes. Skipped {duplicates_skipped} duplicate(s).")
@@ -1056,6 +1064,11 @@ if st.session_state.analyzed and st.session_state.results:
     </div>
     """, unsafe_allow_html=True)
 
+    # Get duplicate count from session state
+    total_files = st.session_state.get('total_files_processed', len(results))
+    duplicates = st.session_state.get('duplicates_count', 0)
+    unique_count = len(results)
+
     # Categorize results
     categories = {
         "Best Fit": [],
@@ -1075,8 +1088,8 @@ if st.session_state.analyzed and st.session_state.results:
         else:
             categories["Not a Fit"].append(result)
 
-    # Summary metrics
-    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    # Summary metrics - 5 columns including duplicates
+    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
     with col_m1:
         st.markdown(f"""
         <div style="background: #ede9fe; padding: 1rem; border-radius: 12px; text-align: center;">
@@ -1103,6 +1116,13 @@ if st.session_state.analyzed and st.session_state.results:
         <div style="background: #fee2e2; padding: 1rem; border-radius: 12px; text-align: center;">
             <div style="font-size: 1.5rem; font-weight: 700; color: #dc2626;">{len(categories['Not a Fit'])}</div>
             <div style="font-size: 0.8rem; color: #dc2626;">Not a Fit</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_m5:
+        st.markdown(f"""
+        <div style="background: #e0e7ff; padding: 1rem; border-radius: 12px; text-align: center;">
+            <div style="font-size: 1.5rem; font-weight: 700; color: #4338ca;">{duplicates}</div>
+            <div style="font-size: 0.8rem; color: #4338ca;">Duplicates Skipped</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1213,6 +1233,11 @@ if st.session_state.analyzed and st.session_state.results:
     # Download report
     st.markdown("---")
     report_text = "AI RESUME SHORTLISTING REPORT\n" + "="*50 + "\n\n"
+    report_text += "PROCESSING SUMMARY\n"
+    report_text += f"Total Files Uploaded: {total_files}\n"
+    report_text += f"Unique Resumes Analyzed: {unique_count}\n"
+    report_text += f"Duplicates Skipped: {duplicates}\n\n"
+    report_text += "RESULTS BREAKDOWN\n"
     report_text += f"Total Candidates: {len(results)}\n"
     report_text += f"Best Fit: {len(categories['Best Fit'])}\n"
     report_text += f"Strong Fit: {len(categories['Strong Fit'])}\n"
@@ -1238,6 +1263,6 @@ if st.session_state.analyzed and st.session_state.results:
 # Footer
 st.markdown("""
 <div style="text-align: center; padding: 2rem; color: #9ca3af; font-size: 0.85rem;">
-    Built for Hackathon 2025 | Powered by Groq AI
+    Built for Mamsys Hackathon 2025 | Powered by Groq AI
 </div>
 """, unsafe_allow_html=True)

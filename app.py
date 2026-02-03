@@ -10,6 +10,9 @@ import io
 import pandas as pd
 from dotenv import load_dotenv
 from docx import Document
+from fpdf import FPDF
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 # Load environment variables from .env file
 load_dotenv()
@@ -448,69 +451,85 @@ Return ONLY the JSON object."""
     except:
         return {"job_title": "", "must_have_skills": [], "nice_to_have_skills": [], "technologies": [], "qualifications": [], "experience_required": ""}
 
+def calculate_verdict_from_score(score):
+    """Calculate verdict deterministically from score - NO LLM involvement"""
+    score = max(0, min(100, score))  # Clamp between 0-100
+
+    if score >= 85:
+        return "Best Fit", "Recommend for Interview"
+    elif score >= 70:
+        return "Strong Fit", "Recommend for Interview"
+    elif score >= 50:
+        return "Average", "Consider for Interview"
+    else:
+        return "Not a Fit", "Do Not Recommend"
+
 def analyze_resume(client, resume_text, job_description, nice_to_have_skills, candidate_name, job_title):
-    """Analyze a single resume against job description using Groq with improved scoring"""
+    """Analyze a single resume against job description using Groq with DETERMINISTIC scoring"""
 
     nice_to_have_text = ", ".join(nice_to_have_skills) if nice_to_have_skills else "None specified"
 
-    prompt = f"""You are an expert technical recruiter with 15 years of experience.
-Evaluate the following resume against the job description with STRICT and ACCURATE scoring.
+    prompt = f"""You are an expert technical recruiter. Analyze this resume against the job description.
 
-SCORING CRITERIA (Be precise and fair):
-- Must-Have Skills Match: 40% weight (each missing critical skill = -10 points)
-- Experience Relevance: 25% weight (years + role alignment)
-- Nice-to-Have Skills: 15% weight (bonus points for having these)
-- Education/Certifications: 10% weight
-- Overall Presentation: 10% weight
+SCORING RULES (Follow EXACTLY - calculate each component):
+1. SKILLS MATCH (0-40 points):
+   - List ALL required skills from JD
+   - Count how many the candidate has
+   - Score = (matched_skills / total_required_skills) * 40
 
-IMPORTANT: Return ONLY valid JSON, no other text. Use this exact structure:
+2. EXPERIENCE (0-25 points):
+   - Check years of experience vs required
+   - Check if roles are relevant
+   - Full points if meets/exceeds, partial if close
+
+3. NICE-TO-HAVE (0-15 points):
+   - Check for bonus skills: {nice_to_have_text}
+   - 5 points per nice-to-have skill found (max 15)
+
+4. EDUCATION (0-10 points):
+   - Relevant degree = 10, Related field = 7, Any degree = 5
+
+5. PRESENTATION (0-10 points):
+   - Clear formatting, no errors = 10
+
+FINAL SCORE = Sum of all components (0-100)
+
+Return ONLY this JSON (no other text):
 {{
-    "fit_score": <number 0-100 based on above criteria>,
-    "email": "<extracted email or 'Not provided'>",
-    "phone": "<extracted phone number or 'Not provided'>",
-    "location": "<extracted city/location or 'Not provided'>",
-    "skills_matched": ["skill1", "skill2", "skill3"],
-    "skills_missing": ["skill1", "skill2"],
-    "nice_to_have_matched": ["skill1", "skill2"],
-    "current_role": "<extracted current job title or 'Not specified'>",
-    "experience_years": <number or 0>,
-    "strengths": ["strength1", "strength2", "strength3"],
-    "weaknesses": ["weakness1", "weakness2"],
-    "summary": "<2-3 sentence evaluation>",
-    "verdict": "<Best Fit OR Strong Fit OR Average OR Not a Fit>",
-    "recommendation": "<Recommend for Interview OR Consider for Interview OR Do Not Recommend>",
     "score_breakdown": {{
         "skills_score": <0-40>,
         "experience_score": <0-25>,
         "nice_to_have_score": <0-15>,
         "education_score": <0-10>,
         "presentation_score": <0-10>
-    }}
+    }},
+    "fit_score": <SUM of above scores>,
+    "email": "<extracted email or 'Not provided'>",
+    "phone": "<extracted phone or 'Not provided'>",
+    "location": "<city/state or 'Not provided'>",
+    "skills_matched": ["skill1", "skill2"],
+    "skills_missing": ["skill1", "skill2"],
+    "nice_to_have_matched": ["skill1"],
+    "current_role": "<current job title or 'Not specified'>",
+    "experience_years": <number>,
+    "strengths": ["strength1", "strength2"],
+    "weaknesses": ["weakness1"],
+    "summary": "<2 sentence evaluation>"
 }}
 
-Verdict Guidelines (STRICT):
-- Best Fit (85-100): Exceeds requirements, has most must-have skills + nice-to-have
-- Strong Fit (70-84): Meets most requirements, minor gaps
-- Average (50-69): Meets some requirements, needs training
-- Not a Fit (0-49): Missing critical requirements
-
 JOB TITLE: {job_title}
-
-NICE-TO-HAVE SKILLS: {nice_to_have_text}
 
 RESUME:
 {resume_text[:4000]}
 
 JOB DESCRIPTION:
-{job_description[:2000]}
-
-Return ONLY the JSON object, nothing else."""
+{job_description[:2000]}"""
 
     try:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
+            temperature=0.0,  # ZERO temperature for maximum consistency
             max_tokens=1200
         )
         result_text = response.choices[0].message.content.strip()
@@ -521,9 +540,29 @@ Return ONLY the JSON object, nothing else."""
             result_text = result_text.split("```")[1].split("```")[0]
 
         result = json.loads(result_text)
+
+        # VALIDATE and RECALCULATE score from breakdown
+        breakdown = result.get('score_breakdown', {})
+        calculated_score = (
+            min(40, max(0, breakdown.get('skills_score', 0))) +
+            min(25, max(0, breakdown.get('experience_score', 0))) +
+            min(15, max(0, breakdown.get('nice_to_have_score', 0))) +
+            min(10, max(0, breakdown.get('education_score', 0))) +
+            min(10, max(0, breakdown.get('presentation_score', 0)))
+        )
+
+        # Use calculated score (not LLM's fit_score) for consistency
+        result['fit_score'] = calculated_score
+
+        # DETERMINISTIC verdict based on score
+        verdict, recommendation = calculate_verdict_from_score(calculated_score)
+        result['verdict'] = verdict
+        result['recommendation'] = recommendation
+
         result['candidate_name'] = candidate_name
         result['job_title'] = job_title
         return result
+
     except json.JSONDecodeError as e:
         return {
             "candidate_name": candidate_name,
@@ -557,7 +596,7 @@ Return ONLY the JSON object, nothing else."""
             "skills_missing": [],
             "nice_to_have_matched": [],
             "error": str(e),
-            "verdict": "Error",
+            "verdict": "Not a Fit",
             "summary": f"API Error: {str(e)}"
         }
 
@@ -569,6 +608,7 @@ def get_category_color(category):
         "Not a Fit": ("#dc2626", "#fee2e2")
     }
     return colors.get(category, ("#6b7280", "#f3f4f6"))
+
 
 def create_excel_report(results, categories, total_files, duplicates, job_title):
     """Create Excel report with all candidate data"""
@@ -595,6 +635,63 @@ def create_excel_report(results, categories, total_files, duplicates, job_title)
 
     df = pd.DataFrame(data)
     return df
+
+def generate_pdf_report(results, job_title, categories, total_files, duplicates):
+    """Generate PDF Report for Resume Analysis"""
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    # Title
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(200, 10, "AI Resume Shortlisting Report", ln=True, align="C")
+    pdf.ln(10)
+
+    # Job Title
+    pdf.set_font("Arial", "", 12)
+    pdf.cell(200, 10, f"Job Title: {job_title}", ln=True)
+    pdf.ln(5)
+
+    # Summary Section
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(200, 10, "Processing Summary", ln=True)
+
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(200, 8, f"Total Files Uploaded: {total_files}", ln=True)
+    pdf.cell(200, 8, f"Unique Resumes Analyzed: {len(results)}", ln=True)
+    pdf.cell(200, 8, f"Duplicates Skipped: {duplicates}", ln=True)
+    pdf.ln(8)
+
+    # Category Breakdown
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(200, 10, "Results Breakdown", ln=True)
+
+    pdf.set_font("Arial", "", 11)
+    for cat, cat_results in categories.items():
+        pdf.cell(200, 8, f"{cat}: {len(cat_results)} candidates", ln=True)
+
+    pdf.ln(10)
+
+    # Top Candidates
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(200, 10, "Top Candidates", ln=True)
+
+    pdf.set_font("Arial", "", 10)
+    for result in results[:10]:
+        pdf.multi_cell(
+            0,
+            7,
+            f"Name: {result.get('candidate_name')}\n"
+            f"Score: {result.get('fit_score')}%\n"
+            f"Role: {result.get('current_role')}\n"
+            f"Location: {result.get('location')}\n"
+            f"Recommendation: {result.get('recommendation')}\n"
+            "----------------------------------------"
+        )
+
+    # ✅ Return PDF bytes
+    return pdf.output(dest="S").encode("latin-1")
 
 # Sidebar
 with st.sidebar:
@@ -694,23 +791,55 @@ with col1:
             st.markdown(file_chips, unsafe_allow_html=True)
 
     else:
+        # Check if running on Streamlit Cloud
+        is_cloud = os.getenv("STREAMLIT_SHARING_MODE") or "streamlit.app" in os.getenv("HOSTNAME", "") or not os.path.exists("C:\\")
+
+        if is_cloud:
+            st.warning("⚠️ **Folder selection only works when running locally.** On Streamlit Cloud, please use 'Upload Files' instead.")
+
         st.markdown("""
         <div style="background: #f9fafb; border: 2px dashed #ddd6fe; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
             <p style="color: #6b7280; font-size: 0.9rem; margin: 0;">
-                📁 Enter the full path to your resumes folder
+                📁 Enter the full path to your resumes folder (Local only)
             </p>
         </div>
         """, unsafe_allow_html=True)
 
-        folder_path = st.text_input(
+        folder_path_input = st.text_input(
             "Folder Path",
             placeholder=r"C:\Users\HR\Resumes or /home/hr/resumes",
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            key="folder_path_input"
         )
 
-        if folder_path:
-            folder_path = Path(folder_path)
-            if folder_path.exists() and folder_path.is_dir():
+        if folder_path_input:
+            # Clean the path - remove quotes, extra spaces, and normalize
+            folder_path_clean = folder_path_input.strip().strip('"').strip("'").strip()
+
+            # Handle escaped backslashes (when copied from some sources)
+            folder_path_clean = folder_path_clean.replace("\\\\", "\\")
+
+            # Remove any invisible/control characters (keep printable + space)
+            folder_path_clean = ''.join(c for c in folder_path_clean if c.isprintable())
+
+            # Handle HTML entities that might come from browser copy
+            folder_path_clean = folder_path_clean.replace("&amp;", "&")
+            folder_path_clean = folder_path_clean.replace("%20", " ")
+
+            # Remove leading/trailing whitespace again after all cleaning
+            folder_path_clean = folder_path_clean.strip()
+
+            # Debug info - show character codes for troubleshooting
+            st.caption(f"📂 Path: `{folder_path_clean}` ({len(folder_path_clean)} chars)")
+
+            try:
+                folder_path = Path(folder_path_clean)
+            except Exception as path_err:
+                st.error(f"❌ Invalid path format: {path_err}")
+                st.session_state.folder_pdf_paths = []
+                folder_path = None
+
+            if folder_path and folder_path.exists() and folder_path.is_dir():
                 resume_files = (
                     list(folder_path.glob("*.pdf")) +
                     list(folder_path.glob("*.PDF")) +
@@ -748,8 +877,15 @@ with col1:
                 else:
                     st.warning("⚠️ No PDF/DOCX files found in this folder")
                     st.session_state.folder_pdf_paths = []
-            else:
-                st.error("❌ Folder not found. Please check the path.")
+            elif folder_path:
+                # More helpful error message
+                if not folder_path.exists():
+                    st.error(f"❌ Path does not exist: `{folder_path_clean}`")
+                    st.info("💡 Tip: Copy the path from Windows Explorer address bar")
+                elif not folder_path.is_dir():
+                    st.error(f"❌ Path is not a folder (it's a file): `{folder_path_clean}`")
+                else:
+                    st.error("❌ Folder not found. Please check the path.")
                 st.session_state.folder_pdf_paths = []
 
 with col2:
@@ -843,27 +979,32 @@ if analyze_clicked:
         st.error("⚠️ Please upload resumes or select a folder with PDF/DOCX files")
     else:
         try:
-            client = Groq(api_key=GROQ_API_KEY)
             progress_bar = st.progress(0)
             status_text = st.empty()
             time_estimate = st.empty()
             duplicate_info = st.empty()
 
-            results = []
-            seen_hashes = {}
-            duplicates_skipped = 0
             total = len(files_to_process)
 
+            # Parallel processing settings
+            MAX_WORKERS = min(5, total)  # Limit to 5 parallel requests (Groq rate limit friendly)
+
             if total > 10:
-                est_time = total * 2
-                time_estimate.info(f"⏱️ Estimated time: {est_time // 60}m {est_time % 60}s for {total} resumes")
+                est_time = (total // MAX_WORKERS) * 2  # Much faster with parallel
+                time_estimate.info(f"⚡ Parallel processing: ~{est_time // 60}m {est_time % 60}s for {total} resumes ({MAX_WORKERS} parallel workers)")
+
+            # Step 1: Extract text from all files first (fast, can be parallelized)
+            status_text.text("📄 Extracting text from resumes...")
+
+            extracted_data = []
+            seen_hashes = {}
+            duplicates_skipped = 0
 
             for idx, file_item in enumerate(files_to_process):
                 if use_folder:
                     file_path = file_item
                     file_name = file_path.name
                     file_ext = file_path.suffix.lower()
-                    status_text.text(f"🔍 Analyzing {file_name}... ({idx + 1}/{total})")
 
                     if file_ext == '.pdf':
                         resume_text = extract_text_from_pdf_path(file_path)
@@ -874,7 +1015,6 @@ if analyze_clicked:
                 else:
                     file_name = file_item.name
                     file_ext = Path(file_name).suffix.lower()
-                    status_text.text(f"🔍 Analyzing {file_name}... ({idx + 1}/{total})")
 
                     if file_ext == '.pdf':
                         resume_text = extract_text_from_pdf(file_item)
@@ -888,7 +1028,7 @@ if analyze_clicked:
                     clean_name = clean_name.replace(ext, '')
 
                 if resume_text.startswith("Error"):
-                    results.append({
+                    extracted_data.append({
                         "candidate_name": clean_name,
                         "job_title": job_title,
                         "fit_score": 0,
@@ -899,27 +1039,92 @@ if analyze_clicked:
                         "skills_matched": [],
                         "skills_missing": [],
                         "nice_to_have_matched": [],
-                        "summary": "Could not extract text from file"
+                        "summary": "Could not extract text from file",
+                        "is_error": True
                     })
                 else:
                     content_hash = get_content_hash(resume_text)
 
                     if content_hash in seen_hashes:
                         duplicates_skipped += 1
-                        duplicate_info.warning(f"⚠️ Skipped {duplicates_skipped} duplicate(s) - '{file_name}' same as '{seen_hashes[content_hash]}'")
                     else:
                         seen_hashes[content_hash] = file_name
-                        result = analyze_resume(
-                            client,
-                            resume_text,
-                            job_description,
-                            nice_to_have_skills,
-                            clean_name,
-                            job_title
-                        )
-                        results.append(result)
+                        extracted_data.append({
+                            "resume_text": resume_text,
+                            "candidate_name": clean_name,
+                            "is_error": False
+                        })
 
-                progress_bar.progress((idx + 1) / total)
+                progress_bar.progress((idx + 1) / total * 0.3)  # 30% for extraction
+
+            if duplicates_skipped > 0:
+                duplicate_info.success(f"✅ Found {duplicates_skipped} duplicate(s) - will be skipped")
+
+            # Step 2: Parallel API calls for analysis
+            status_text.text(f"🚀 Analyzing {len([d for d in extracted_data if not d.get('is_error')])} resumes in parallel...")
+
+            results = []
+            resumes_to_analyze = [d for d in extracted_data if not d.get('is_error')]
+            error_results = [d for d in extracted_data if d.get('is_error')]
+
+            # Add error results directly
+            for err in error_results:
+                del err['is_error']
+                results.append(err)
+
+            # Thread-safe counter for progress
+            completed_count = [0]
+            lock = threading.Lock()
+
+            def analyze_single_resume(data):
+                """Analyze a single resume - called in parallel"""
+                client = Groq(api_key=GROQ_API_KEY)  # Each thread gets its own client
+                result = analyze_resume(
+                    client,
+                    data['resume_text'],
+                    job_description,
+                    nice_to_have_skills,
+                    data['candidate_name'],
+                    job_title
+                )
+
+                with lock:
+                    completed_count[0] += 1
+
+                return result
+
+            # Parallel execution
+            if resumes_to_analyze:
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                    futures = {executor.submit(analyze_single_resume, data): data for data in resumes_to_analyze}
+
+                    for future in as_completed(futures):
+                        try:
+                            result = future.result()
+                            results.append(result)
+
+                            # Update progress (30% extraction + 70% analysis)
+                            progress = 0.3 + (completed_count[0] / len(resumes_to_analyze)) * 0.7
+                            progress_bar.progress(progress)
+                            status_text.text(f"🔍 Analyzed {completed_count[0]}/{len(resumes_to_analyze)} resumes...")
+
+                        except Exception as e:
+                            data = futures[future]
+                            results.append({
+                                "candidate_name": data['candidate_name'],
+                                "job_title": job_title,
+                                "fit_score": 0,
+                                "error": str(e),
+                                "verdict": "Error",
+                                "current_role": "Unknown",
+                                "location": "Not provided",
+                                "skills_matched": [],
+                                "skills_missing": [],
+                                "nice_to_have_matched": [],
+                                "summary": f"Error: {str(e)}"
+                            })
+
+            progress_bar.progress(1.0)
 
             results.sort(key=lambda x: x.get('fit_score', 0), reverse=True)
             st.session_state.results = results
@@ -943,68 +1148,53 @@ if analyze_clicked:
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
 
-# Display results
+# ✅ Display results ONLY after analysis
 if st.session_state.analyzed and st.session_state.results:
+
     results = st.session_state.results
-    job_title = st.session_state.get('job_title', 'Not specified')
+    job_title = st.session_state.get("job_title", "Not specified")
 
     st.markdown("---")
 
-    # Feature 3: Job Designation Display
     st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); padding: 1rem 1.5rem; border-radius: 12px; margin-bottom: 1rem;">
-        <div style="color: white; font-size: 0.8rem; opacity: 0.9;">Analyzing for Position</div>
-        <div style="color: white; font-size: 1.25rem; font-weight: 700;">{job_title}</div>
+    <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+                padding: 1rem 1.5rem;
+                border-radius: 12px;
+                margin-bottom: 1rem;">
+        <div style="color: white; font-size: 0.8rem;">Analyzing for Position</div>
+        <div style="color: white; font-size: 1.25rem; font-weight: 700;">
+            {job_title}
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Feature 7: Filter Section
+    # ✅ Filtering UI
     st.markdown("### 🔍 Filter Results")
-    filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
+
+    filter_col1, filter_col2 = st.columns(2)
 
     with filter_col1:
+        min_score = st.slider("Minimum Score", 0, 100, 0)
+
+    with filter_col2:
         filter_verdict = st.multiselect(
             "Verdict",
             ["Best Fit", "Strong Fit", "Average", "Not a Fit"],
             default=["Best Fit", "Strong Fit", "Average", "Not a Fit"]
         )
 
-    with filter_col2:
-        min_score = st.slider("Minimum Score", 0, 100, 0)
-
-    with filter_col3:
-        # Get unique locations
-        all_locations = list(set([r.get('location', 'Not provided') for r in results]))
-        filter_location = st.multiselect("Location", all_locations, default=all_locations)
-
-    with filter_col4:
-        # Get all skills for filtering
-        all_skills = set()
-        for r in results:
-            all_skills.update(r.get('skills_matched', []))
-        filter_skills = st.multiselect("Has Skill", list(all_skills))
-
-    # Apply filters
+    # ✅ Apply filters safely
     filtered_results = [
         r for r in results
-        if r.get('verdict', 'Not a Fit') in filter_verdict
-        and r.get('fit_score', 0) >= min_score
-        and r.get('location', 'Not provided') in filter_location
-        and (not filter_skills or any(s in r.get('skills_matched', []) for s in filter_skills))
+        if r.get("fit_score", 0) >= min_score
+        and r.get("verdict", "Not a Fit") in filter_verdict
     ]
 
-    st.markdown(f"""
-    <div class="results-header">
-        <div class="results-title">
-            Results <span class="match-count">{len(filtered_results)} of {len(results)} Candidates</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # ✅ Stats
+    total_files = st.session_state.get("total_files_processed", len(results))
+    duplicates = st.session_state.get("duplicates_count", 0)
 
-    total_files = st.session_state.get('total_files_processed', len(results))
-    duplicates = st.session_state.get('duplicates_count', 0)
-
-    # Categorize filtered results
+    # ✅ Categorize results
     categories = {
         "Best Fit": [],
         "Strong Fit": [],
@@ -1012,243 +1202,91 @@ if st.session_state.analyzed and st.session_state.results:
         "Not a Fit": []
     }
 
-    for result in filtered_results:
-        verdict = result.get('verdict', 'Not a Fit')
+    for res in filtered_results:
+        verdict = res.get("verdict", "Not a Fit")
+
         if "Best" in verdict:
-            categories["Best Fit"].append(result)
+            categories["Best Fit"].append(res)
         elif "Strong" in verdict:
-            categories["Strong Fit"].append(result)
+            categories["Strong Fit"].append(res)
         elif "Average" in verdict:
-            categories["Average"].append(result)
+            categories["Average"].append(res)
         else:
-            categories["Not a Fit"].append(result)
+            categories["Not a Fit"].append(res)
 
-    # Summary metrics - 5 columns including duplicates
-    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
-    with col_m1:
-        st.markdown(f"""
-        <div style="background: #ede9fe; padding: 1rem; border-radius: 12px; text-align: center;">
-            <div style="font-size: 1.5rem; font-weight: 700; color: #7c3aed;">{len(categories['Best Fit'])}</div>
-            <div style="font-size: 0.8rem; color: #7c3aed;">Best Fit</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_m2:
-        st.markdown(f"""
-        <div style="background: #d1fae5; padding: 1rem; border-radius: 12px; text-align: center;">
-            <div style="font-size: 1.5rem; font-weight: 700; color: #059669;">{len(categories['Strong Fit'])}</div>
-            <div style="font-size: 0.8rem; color: #059669;">Strong Fit</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_m3:
-        st.markdown(f"""
-        <div style="background: #fef3c7; padding: 1rem; border-radius: 12px; text-align: center;">
-            <div style="font-size: 1.5rem; font-weight: 700; color: #d97706;">{len(categories['Average'])}</div>
-            <div style="font-size: 0.8rem; color: #d97706;">Average</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_m4:
-        st.markdown(f"""
-        <div style="background: #fee2e2; padding: 1rem; border-radius: 12px; text-align: center;">
-            <div style="font-size: 1.5rem; font-weight: 700; color: #dc2626;">{len(categories['Not a Fit'])}</div>
-            <div style="font-size: 0.8rem; color: #dc2626;">Not a Fit</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_m5:
-        st.markdown(f"""
-        <div style="background: #e0e7ff; padding: 1rem; border-radius: 12px; text-align: center;">
-            <div style="font-size: 1.5rem; font-weight: 700; color: #4338ca;">{duplicates}</div>
-            <div style="font-size: 0.8rem; color: #4338ca;">Duplicates Skipped</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Display each category
+    # ✅ Show candidates
     for category, category_results in categories.items():
+
         if not category_results:
             continue
 
-        text_color, bg_color = get_category_color(category)
+        st.markdown(f"## ✅ {category} ({len(category_results)})")
 
-        st.markdown(f"""
-        <div class="category-header">
-            <span class="category-title">{category}</span>
-            <span class="category-count" style="background: {bg_color}; color: {text_color};">
-                {len(category_results)} candidate{'s' if len(category_results) != 1 else ''}
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
+        for candidate in category_results:
 
-        cols = st.columns(3)
-        for idx, result in enumerate(category_results):
-            col_idx = idx % 3
+            st.markdown(f"""
+            **👤 {candidate.get("candidate_name","Unknown")}**  
+            ✅ Score: {candidate.get("fit_score",0)}%  
+            📍 Location: {candidate.get("location","N/A")}  
+            💼 Role: {candidate.get("current_role","N/A")}  
+            🎯 Recommendation: {candidate.get("recommendation","N/A")}
+            """)
+            st.markdown("---")
 
-            score = result.get('fit_score', 0)
-            name = result.get('candidate_name', 'Unknown')
-            role = result.get('current_role', 'Not specified')
-            location = result.get('location', 'Not provided')
-            email = result.get('email', 'Not provided')
-            phone = result.get('phone', 'Not provided')
-            summary = result.get('summary', 'N/A')
-            matched = result.get('skills_matched', [])
-            missing = result.get('skills_missing', [])
-            nice_matched = result.get('nice_to_have_matched', [])
-            strengths = result.get('strengths', [])
-            weaknesses = result.get('weaknesses', [])
-            recommendation = result.get('recommendation', 'N/A')
-
-            if score >= 85:
-                score_bg = "#7c3aed"
-            elif score >= 70:
-                score_bg = "#059669"
-            elif score >= 50:
-                score_bg = "#d97706"
-            else:
-                score_bg = "#dc2626"
-
-            with cols[col_idx]:
-                # Candidate card with Location (Feature 2)
-                st.markdown(f"""
-                <div style="background: white; border-radius: 12px; padding: 1rem; border: 1px solid #e5e7eb; border-left: 4px solid {score_bg}; margin-bottom: 0.5rem;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div style="width: 50px; height: 50px; border-radius: 50%; background: {score_bg}; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.9rem;">{score}%</div>
-                        <div style="flex: 1; min-width: 0;">
-                            <div style="font-weight: 600; color: #1f2937; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{name}</div>
-                            <div style="font-size: 0.75rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{role}</div>
-                        </div>
-                    </div>
-                    <div style="margin-top: 0.5rem; font-size: 0.7rem; color: #6b7280;">
-                        <div>📍 {location}</div>
-                        <div>📧 {email if email != 'Not provided' else 'N/A'}</div>
-                        <div>📱 {phone if phone != 'Not provided' else 'N/A'}</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                with st.expander("📊 View Analysis"):
-                    # Feature 4: Highlighted Skills with colored tags
-                    st.caption("**Skills Analysis**")
-
-                    if matched:
-                        matched_html = "".join([f'<span class="skill-matched">✓ {s}</span>' for s in matched[:6]])
-                        st.markdown(f"**Matched:** {matched_html}", unsafe_allow_html=True)
-
-                    if missing:
-                        missing_html = "".join([f'<span class="skill-missing">✗ {s}</span>' for s in missing[:6]])
-                        st.markdown(f"**Missing:** {missing_html}", unsafe_allow_html=True)
-
-                    if nice_matched:
-                        nice_html = "".join([f'<span class="skill-nice">★ {s}</span>' for s in nice_matched[:4]])
-                        st.markdown(f"**Nice-to-Have:** {nice_html}", unsafe_allow_html=True)
-
-                    st.markdown("---")
-
-                    sw1, sw2 = st.columns(2)
-                    with sw1:
-                        st.caption("💪 **Strengths**")
-                        if strengths:
-                            for s in strengths[:3]:
-                                st.write(f"• {s}")
-                        else:
-                            st.write("None")
-                    with sw2:
-                        st.caption("⚠️ **Concerns**")
-                        if weaknesses:
-                            for w in weaknesses[:3]:
-                                st.write(f"• {w}")
-                        else:
-                            st.write("None")
-
-                    st.caption("📝 **Summary**")
-                    st.write(summary)
-                    st.info(f"🎯 {recommendation}")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-    # Feature 5: Download reports section
-    st.markdown("---")
-    st.markdown("### 📥 Download Reports")
+    # ✅ ---------------- DOWNLOAD REPORTS SECTION ----------------
+    st.markdown("## 📥 Download Reports")
 
     download_col1, download_col2, download_col3 = st.columns(3)
 
-    # Create DataFrame for Excel/CSV
+    # ✅ Create DataFrame safely
     df = create_excel_report(results, categories, total_files, duplicates, job_title)
 
+    # ✅ CSV Download
     with download_col1:
-        # CSV Download
-        csv_data = df.to_csv(index=False)
         st.download_button(
             "📄 Download CSV",
-            csv_data,
+            df.to_csv(index=False),
             "resume_analysis_report.csv",
-            "text/csv",
-            use_container_width=True
+            "text/csv"
         )
 
+    # ✅ Excel Download
     with download_col2:
-        # Excel Download
         excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='All Candidates')
-
-            # Add separate sheets for each category
-            for cat_name, cat_results in categories.items():
-                if cat_results:
-                    cat_df = create_excel_report(cat_results, {}, 0, 0, job_title)
-                    cat_df.to_excel(writer, index=False, sheet_name=cat_name[:31])
+        with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False)
 
         excel_buffer.seek(0)
+
         st.download_button(
             "📊 Download Excel",
             excel_buffer,
             "resume_analysis_report.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
+    # ✅ PDF Download
     with download_col3:
-        # Text Report
-        report_text = "AI RESUME SHORTLISTING REPORT\n" + "="*50 + "\n\n"
-        report_text += f"JOB TITLE: {job_title}\n\n"
-        report_text += "PROCESSING SUMMARY\n"
-        report_text += f"Total Files Uploaded: {total_files}\n"
-        report_text += f"Unique Resumes Analyzed: {len(results)}\n"
-        report_text += f"Duplicates Skipped: {duplicates}\n\n"
-        report_text += "RESULTS BREAKDOWN\n"
-        report_text += f"Best Fit: {len(categories['Best Fit'])}\n"
-        report_text += f"Strong Fit: {len(categories['Strong Fit'])}\n"
-        report_text += f"Average: {len(categories['Average'])}\n"
-        report_text += f"Not a Fit: {len(categories['Not a Fit'])}\n\n"
-        report_text += "="*50 + "\n\n"
-
-        for category, category_results in categories.items():
-            if category_results:
-                report_text += f"\n--- {category.upper()} ---\n\n"
-                for result in category_results:
-                    report_text += f"Name: {result.get('candidate_name', 'Unknown')}\n"
-                    report_text += f"Score: {result.get('fit_score', 0)}/100\n"
-                    report_text += f"Role: {result.get('current_role', 'N/A')}\n"
-                    report_text += f"Location: {result.get('location', 'N/A')}\n"
-                    report_text += f"Email: {result.get('email', 'N/A')}\n"
-                    report_text += f"Phone: {result.get('phone', 'N/A')}\n"
-                    report_text += f"Matched Skills: {', '.join(result.get('skills_matched', []))}\n"
-                    report_text += f"Missing Skills: {', '.join(result.get('skills_missing', []))}\n"
-                    report_text += f"Nice-to-Have: {', '.join(result.get('nice_to_have_matched', []))}\n"
-                    report_text += f"Summary: {result.get('summary', 'N/A')}\n"
-                    report_text += f"Recommendation: {result.get('recommendation', 'N/A')}\n"
-                    report_text += "-"*30 + "\n\n"
+        pdf_bytes = generate_pdf_report(
+            results,
+            job_title,
+            categories,
+            total_files,
+            duplicates
+        )
 
         st.download_button(
-            "📝 Download TXT",
-            report_text,
-            "resume_analysis_report.txt",
-            "text/plain",
-            use_container_width=True
+            "📑 Download PDF",
+            pdf_bytes,
+            "resume_analysis_report.pdf",
+            "application/pdf"
         )
 
-# Footer
+
+# ✅ Footer ALWAYS outside block
 st.markdown("""
-<div style="text-align: center; padding: 2rem; color: #9ca3af; font-size: 0.85rem;">
+<div style="text-align: center; padding: 2rem;
+            color: #9ca3af; font-size: 0.85rem;">
     Built for Mamsys Hackathon 2025 | Powered by Groq AI
 </div>
 """, unsafe_allow_html=True)

@@ -1523,16 +1523,25 @@ if analyze_clicked:
             results.sort(key=lambda x: x.get('fit_score', 0), reverse=True)
 
             # Name-based deduplication: if same candidate name appears multiple times,
-            # keep only the one with the highest score
-            seen_names = {}
+            # keep only the one with the highest score (using fuzzy matching for robustness)
+            seen_names = []
             unique_results = []
             name_duplicates = 0
             for res in results:
                 name_key = res.get('candidate_name', '').strip().lower()
-                if name_key and name_key != 'unknown' and name_key in seen_names:
+                if not name_key or name_key == 'unknown':
+                    unique_results.append(res)
+                    continue
+                # Fuzzy match against already-seen names (handles LLM name variations)
+                is_duplicate = False
+                for seen in seen_names:
+                    if fuzz.token_sort_ratio(name_key, seen) >= 85:
+                        is_duplicate = True
+                        break
+                if is_duplicate:
                     name_duplicates += 1
                 else:
-                    seen_names[name_key] = True
+                    seen_names.append(name_key)
                     unique_results.append(res)
             results = unique_results
             duplicates_skipped += name_duplicates

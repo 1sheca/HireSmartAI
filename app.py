@@ -874,15 +874,20 @@ def analyze_resume(client, resume_text, job_description, nice_to_have_skills, ca
     # Contact info extraction (regex)
     email, phone, location = extract_contact_info(resume_text)
 
-    # ==================== STEP 2: LLM FOR SUMMARY ONLY ====================
+    # ==================== JD DUPLICATE DETECTION ====================
+    is_jd_duplicate = tfidf_sim > 95  # Flag if resume is >95% similar to JD
+
+    # ==================== STEP 2: LLM FOR SUMMARY + NAME ====================
     summary = ""
     current_role = "Not specified"
     strengths = []
     weaknesses = []
+    llm_candidate_name = ""
 
     try:
         prompt = f"""Analyze this resume briefly. Return ONLY valid JSON:
 {{
+    "candidate_name": "<full name of the candidate from the resume>",
     "current_role": "<current/latest job title>",
     "strengths": ["strength1", "strength2"],
     "weaknesses": ["weakness1"],
@@ -898,7 +903,7 @@ Return ONLY the JSON object."""
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
-            max_tokens=400  # Much less tokens needed now
+            max_tokens=400
         )
         result_text = response.choices[0].message.content.strip()
 
@@ -908,6 +913,7 @@ Return ONLY the JSON object."""
             result_text = result_text.split("```")[1].split("```")[0]
 
         llm_result = json.loads(result_text)
+        llm_candidate_name = llm_result.get("candidate_name", "")
         current_role = llm_result.get("current_role", "Not specified")
         strengths = llm_result.get("strengths", [])
         weaknesses = llm_result.get("weaknesses", [])
@@ -919,9 +925,32 @@ Return ONLY the JSON object."""
         strengths = [f"{len(skills_matched)} skills matched"] if skills_matched else []
         weaknesses = [f"{len(skills_missing)} skills missing"] if skills_missing else []
 
+    # Use LLM-extracted name if the current name looks like a job title or generic text
+    final_name = candidate_name
+    if llm_candidate_name and len(llm_candidate_name) > 2:
+        # Check if current name looks like a real person name (2-4 words, all alpha)
+        current_words = candidate_name.split()
+        looks_like_name = (
+            2 <= len(current_words) <= 4 and
+            all(w.isalpha() for w in current_words) and
+            len(candidate_name) < 40
+        )
+        if not looks_like_name:
+            # Current name doesn't look like a person - use LLM name
+            final_name = llm_candidate_name
+        elif any(kw in candidate_name.lower() for kw in ['senior', 'junior', 'manager', 'engineer', 'developer', 'analyst', 'scientist', 'lead', 'director', 'consultant', 'intern', 'associate', 'executive']):
+            # Current name contains job title keywords - use LLM name
+            final_name = llm_candidate_name
+
+    # Override for JD duplicates
+    if is_jd_duplicate:
+        verdict = "Not a Fit"
+        recommendation = "Possible JD Upload - Not a Resume"
+        summary = "WARNING: This file appears to be the Job Description itself (99%+ similarity), not a candidate resume."
+
     # ==================== RETURN COMBINED RESULT ====================
     return {
-        "candidate_name": candidate_name,
+        "candidate_name": final_name,
         "job_title": job_title,
         "fit_score": total_score,
         "verdict": verdict,

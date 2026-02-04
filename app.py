@@ -520,9 +520,10 @@ def extract_experience_years(text):
 def extract_required_experience(jd_text):
     """Extract required years from JD"""
     patterns = [
-        r'(\d+)\s*[-–to]+\s*(\d+)\s*(?:years?|yrs?)',
-        r'(\d+)\+?\s*(?:years?|yrs?)\s*(?:of)?\s*(?:experience|exp)',
-        r'minimum\s*(\d+)\s*(?:years?|yrs?)',
+        r'(\d+)\s*[-–to]+\s*(\d+)\+?\s*(?:years?|yrs?)',  # "5-10+ years", "5-10 years"
+        r'(\d+)\+?\s*(?:years?|yrs?)\s*(?:of)?\s*(?:experience|exp)',  # "5+ years of experience"
+        r'minimum\s*(\d+)\s*(?:years?|yrs?)',  # "minimum 5 years"
+        r'(\d+)\+?\s*(?:years?|yrs?)',  # Simple fallback: "5+ years", "5 years"
     ]
     for pattern in patterns:
         matches = re.findall(pattern, jd_text, re.IGNORECASE)

@@ -1319,6 +1319,13 @@ if analyze_clicked:
     if not job_title:
         job_title = "Not specified"
 
+    # Merge nice-to-have: manual input + extracted JD keywords
+    if st.session_state.suggested_keywords:
+        extracted_nice = st.session_state.suggested_keywords.get('nice_to_have_skills', [])
+        if extracted_nice:
+            combined = list(set(nice_to_have_skills + extracted_nice))
+            nice_to_have_skills = combined
+
     if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":
         st.error("⚠️ API key not configured. Please add your Groq API key to the .env file")
     elif not job_description:

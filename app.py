@@ -440,8 +440,9 @@ Return ONLY the JSON object."""
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=800
+            temperature=0.0,
+            max_tokens=800,
+            seed=42
         )
         result_text = response.choices[0].message.content.strip()
 
@@ -599,7 +600,7 @@ def extract_skills_from_jd(jd_text):
         if b_clean and b_clean not in found_skills and len(b_clean) < 30:
             found_skills.append(b_clean)
 
-    return list(set(found_skills)) if found_skills else ["General skills"]
+    return sorted(set(found_skills), key=str.lower) if found_skills else ["General skills"]
 
 def fuzzy_match_skills(required_skills, resume_text, threshold=70):
     """Match skills using fuzzy string matching - handles typos and variations"""
@@ -904,7 +905,8 @@ Return ONLY the JSON object."""
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
-            max_tokens=400
+            max_tokens=400,
+            seed=42
         )
         result_text = response.choices[0].message.content.strip()
 
@@ -1355,7 +1357,7 @@ if analyze_clicked:
     if st.session_state.suggested_keywords:
         extracted_nice = st.session_state.suggested_keywords.get('nice_to_have_skills', [])
         if extracted_nice:
-            combined = list(set(nice_to_have_skills + extracted_nice))
+            combined = sorted(set(nice_to_have_skills + extracted_nice), key=str.lower)
             nice_to_have_skills = combined
 
     if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":

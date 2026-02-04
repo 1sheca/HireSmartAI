@@ -666,6 +666,163 @@ def calculate_verdict_from_score(score):
         return "Not a Fit", "Do Not Recommend"
 
 
+## ===================== NAME EXTRACTION ===================== ##
+
+def split_camel_case(text):
+    """Split CamelCase into separate words: 'AnkitDarade' -> 'Ankit Darade'"""
+    result = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+    result = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', result)
+    return result
+
+def clean_candidate_name(file_name):
+    """Remove platform prefixes, experience suffixes, and clean up filename for display"""
+    name = file_name
+
+    # Remove file extensions
+    for ext in ['.pdf', '.PDF', '.docx', '.DOCX', '.doc', '.DOC']:
+        name = name.replace(ext, '')
+
+    # Remove common job portal prefixes (case-insensitive)
+    platform_prefixes = [
+        r'(?i)^naukri[_\-\s]+',
+        r'(?i)^indeed[_\-\s]+',
+        r'(?i)^linkedin[_\-\s]+',
+        r'(?i)^monster[_\-\s]+',
+        r'(?i)^shine[_\-\s]+',
+        r'(?i)^timesjobs[_\-\s]+',
+        r'(?i)^glassdoor[_\-\s]+',
+        r'(?i)^foundit[_\-\s]+',
+        r'(?i)^ziprecruiter[_\-\s]+',
+        r'(?i)^hirect[_\-\s]+',
+        r'(?i)^instahyre[_\-\s]+',
+        r'(?i)^apna[_\-\s]+',
+        r'(?i)^iimjobs[_\-\s]+',
+        r'(?i)^cutshort[_\-\s]+',
+        r'(?i)^hirist[_\-\s]+',
+        r'(?i)^angellist[_\-\s]+',
+        r'(?i)^wellfound[_\-\s]+',
+    ]
+    for prefix in platform_prefixes:
+        name = re.sub(prefix, '', name)
+
+    # Remove experience tags like [6y_0m], [5y 6m], (6y_0m), [2y_3m], etc.
+    name = re.sub(r'[\[\(]\d+y[\s_\-]?\d*m?[\]\)]', '', name)
+
+    # Remove trailing numbers in brackets/parens like (1), [1], (2), [2]
+    name = re.sub(r'[\[\(]\d+[\]\)]', '', name)
+
+    # Remove "Resume", "CV", "resume" etc. if present
+    name = re.sub(r'(?i)\b(resume|cv|curriculum[\s_\-]?vitae)\b', '', name)
+
+    # Remove date patterns like _12_01_26, _12-01-2026, _2026_01_12
+    name = re.sub(r'[_\-]?\d{1,2}[_\-]\d{1,2}[_\-]\d{2,4}', '', name)
+    name = re.sub(r'[_\-]?\d{4}[_\-]\d{1,2}[_\-]\d{1,2}', '', name)
+
+    # Replace underscores and hyphens with spaces
+    name = name.replace('_', ' ').replace('-', ' ')
+
+    # Split CamelCase: "AnkitDarade" -> "Ankit Darade"
+    name = split_camel_case(name)
+
+    # Remove extra whitespace
+    name = re.sub(r'\s+', ' ', name).strip()
+
+    # Remove any remaining lone numbers
+    name = re.sub(r'\b\d+\b', '', name).strip()
+    name = re.sub(r'\s+', ' ', name).strip()
+
+    return name if name else file_name
+
+
+def extract_name_from_resume(resume_text):
+    """Extract candidate name from resume text content.
+    Looks at the first few lines for a name pattern (2-4 capitalized words)."""
+    if not resume_text or resume_text.startswith("Error"):
+        return None
+
+    # Words that are NOT names - common resume headers/labels
+    skip_words = {
+        'resume', 'cv', 'curriculum', 'vitae', 'profile', 'summary',
+        'objective', 'experience', 'education', 'skills', 'contact',
+        'phone', 'email', 'address', 'personal', 'details', 'information',
+        'professional', 'career', 'about', 'me', 'page', 'confidential',
+        'private', 'strictly', 'naukri', 'indeed', 'linkedin', 'http',
+        'https', 'www', 'gmail', 'yahoo', 'hotmail', 'outlook',
+        'mobile', 'tel', 'name', 'date', 'gender', 'nationality',
+        'references', 'available', 'upon', 'request', 'dear', 'sir',
+        'madam', 'to', 'whom', 'it', 'may', 'concern'
+    }
+
+    # Get first 15 non-empty lines of the resume
+    lines = resume_text.strip().split('\n')
+    candidate_lines = []
+    for line in lines:
+        cleaned = line.strip()
+        if cleaned and len(cleaned) > 1:
+            candidate_lines.append(cleaned)
+        if len(candidate_lines) >= 15:
+            break
+
+    for line in candidate_lines:
+        # Skip lines that are too long (likely paragraphs, not names)
+        if len(line) > 50:
+            continue
+
+        # Skip lines with email addresses
+        if '@' in line:
+            continue
+
+        # Skip lines with 7+ consecutive digits (phone numbers)
+        if re.search(r'\d{7,}', line):
+            continue
+
+        # Skip lines that are mostly numbers
+        digits = sum(c.isdigit() for c in line)
+        if digits > len(line) * 0.3:
+            continue
+
+        # Skip lines with URLs
+        if re.search(r'https?://|www\.', line, re.IGNORECASE):
+            continue
+
+        # Skip lines that are common headers
+        line_lower = line.lower().strip()
+        if line_lower in skip_words:
+            continue
+        if any(line_lower.startswith(w) for w in ['objective', 'summary', 'experience', 'education', 'skills', 'profile summary', 'contact', 'phone', 'email', 'mobile', 'address']):
+            continue
+
+        # Clean the line - remove special chars at edges
+        clean_line = re.sub(r'^[^a-zA-Z]+|[^a-zA-Z]+$', '', line.strip())
+        if not clean_line:
+            continue
+
+        # Try to match a name pattern: 2-4 words, predominantly letters
+        words = clean_line.split()
+        if 2 <= len(words) <= 4 and len(clean_line) < 40:
+            all_name_like = all(
+                len(w) >= 1 and w[0].isupper() and re.match(r'^[A-Za-z.]+$', w)
+                for w in words
+            )
+            if all_name_like:
+                lower_words = [w.lower().rstrip('.') for w in words]
+                if not any(w in skip_words for w in lower_words):
+                    return clean_line
+
+        # Also try: single CamelCase word that splits into 2-3 name parts
+        if len(words) == 1 and len(clean_line) >= 4:
+            split_name = split_camel_case(clean_line)
+            split_words = split_name.split()
+            if 2 <= len(split_words) <= 3:
+                all_alpha = all(w.isalpha() and w[0].isupper() for w in split_words)
+                if all_alpha:
+                    lower_words = [w.lower() for w in split_words]
+                    if not any(w in skip_words for w in lower_words):
+                        return split_name
+
+    return None
+
+
 ## ===================== HYBRID ANALYSIS ===================== ##
 
 def analyze_resume(client, resume_text, job_description, nice_to_have_skills, candidate_name, job_title):
@@ -1214,9 +1371,14 @@ if analyze_clicked:
                     else:
                         resume_text = "Error: Unsupported file format"
 
-                clean_name = file_name
-                for ext in ['.pdf', '.PDF', '.docx', '.DOCX', '.doc', '.DOC']:
-                    clean_name = clean_name.replace(ext, '')
+                # Clean the filename (remove platform prefixes, extensions, etc.)
+                clean_name = clean_candidate_name(file_name)
+
+                # Try to extract actual name from resume content
+                if not resume_text.startswith("Error"):
+                    extracted_name = extract_name_from_resume(resume_text)
+                    if extracted_name:
+                        clean_name = extracted_name
 
                 if resume_text.startswith("Error"):
                     extracted_data.append({

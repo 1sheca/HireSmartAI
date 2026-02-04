@@ -1284,9 +1284,13 @@ with col2:
     )
     nice_to_have_skills = [s.strip() for s in nice_to_have_input.split(",") if s.strip()] if nice_to_have_input else []
 
-    # Feature 6: Suggest Keywords Button (inside col2 so it's always visible)
-    if job_description and GROQ_API_KEY:
-        if st.button("🔍 Extract Keywords from JD", use_container_width=True):
+    # Feature 6: Suggest Keywords Button (always visible)
+    if st.button("🔍 Extract Keywords from JD", use_container_width=True):
+        if not job_description:
+            st.warning("⚠️ Please enter a job description first")
+        elif not GROQ_API_KEY:
+            st.warning("⚠️ API key not configured")
+        else:
             with st.spinner("Analyzing job description..."):
                 client = Groq(api_key=GROQ_API_KEY)
                 keywords = extract_keywords_from_jd(client, job_description)

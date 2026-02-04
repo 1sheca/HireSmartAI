@@ -13,6 +13,9 @@ from docx import Document
 from fpdf import FPDF
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from rapidfuzz import fuzz, process
 
 # Load environment variables from .env file
 load_dotenv()
@@ -451,9 +454,207 @@ Return ONLY the JSON object."""
     except:
         return {"job_title": "", "must_have_skills": [], "nice_to_have_skills": [], "technologies": [], "qualifications": [], "experience_required": ""}
 
+## ===================== ML SCORING FUNCTIONS ===================== ##
+
+def extract_contact_info(text):
+    """Extract email, phone, location using regex - NO LLM needed"""
+    # Email
+    email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    emails = re.findall(email_pattern, text)
+    email = emails[0] if emails else "Not provided"
+
+    # Phone (Indian + international formats)
+    phone_patterns = [
+        r'(?:\+91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}',  # Indian mobile
+        r'(?:\+91[\s-]?)?\d{5}[\s-]?\d{5}',          # 10 digit
+        r'(?:\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}',  # US/intl
+        r'\d{3}[\s-]\d{3}[\s-]\d{4}',                 # XXX-XXX-XXXX
+    ]
+    phone = "Not provided"
+    for pattern in phone_patterns:
+        phones = re.findall(pattern, text)
+        if phones:
+            phone = phones[0].strip()
+            break
+
+    # Location - common Indian cities + international
+    cities = [
+        "Mumbai", "Delhi", "Bangalore", "Bengaluru", "Hyderabad", "Chennai",
+        "Kolkata", "Pune", "Ahmedabad", "Jaipur", "Lucknow", "Kanpur",
+        "Nagpur", "Indore", "Thane", "Bhopal", "Visakhapatnam", "Vadodara",
+        "Gurgaon", "Gurugram", "Noida", "Chandigarh", "Coimbatore", "Kochi",
+        "Mysore", "Mysuru", "Surat", "Nashik", "Rajkot", "Ranchi",
+        "New York", "San Francisco", "London", "Dubai", "Singapore", "Toronto",
+        "Remote", "Work from home", "WFH", "Hybrid"
+    ]
+    location = "Not provided"
+    text_lower = text.lower()
+    for city in cities:
+        if city.lower() in text_lower:
+            location = city
+            break
+
+    return email, phone, location
+
+def extract_experience_years(text):
+    """Extract years of experience using regex - NO LLM needed"""
+    patterns = [
+        r'(\d+)\+?\s*(?:years?|yrs?)\s*(?:of)?\s*(?:experience|exp)',
+        r'experience\s*(?:of)?\s*(\d+)\+?\s*(?:years?|yrs?)',
+        r'(\d+)\+?\s*(?:years?|yrs?)\s*(?:in|of)\s*(?:IT|software|development|engineering)',
+        r'total\s*(?:experience|exp)\s*(?:of)?\s*(\d+)',
+        r'(\d+)\s*(?:years?|yrs?)\s*(\d+)\s*(?:months?|mos?)',
+    ]
+    years = 0
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        if matches:
+            match = matches[0]
+            if isinstance(match, tuple):
+                years = int(match[0])
+            else:
+                years = int(match)
+            break
+    return years
+
+def extract_required_experience(jd_text):
+    """Extract required years from JD"""
+    patterns = [
+        r'(\d+)\s*[-–to]+\s*(\d+)\s*(?:years?|yrs?)',
+        r'(\d+)\+?\s*(?:years?|yrs?)\s*(?:of)?\s*(?:experience|exp)',
+        r'minimum\s*(\d+)\s*(?:years?|yrs?)',
+    ]
+    for pattern in patterns:
+        matches = re.findall(pattern, jd_text, re.IGNORECASE)
+        if matches:
+            match = matches[0]
+            if isinstance(match, tuple):
+                return int(match[0])  # Take lower bound
+            return int(match)
+    return 0
+
+def extract_education(text):
+    """Detect education level from resume text - NO LLM needed"""
+    text_lower = text.lower()
+
+    # Check for degrees (highest first)
+    phd_keywords = ['ph.d', 'phd', 'doctorate', 'doctoral']
+    masters_keywords = ['m.tech', 'mtech', 'm.sc', 'msc', 'mba', 'm.e.', 'masters', 'master of', 'ms in', 'm.s.', 'mca', 'm.c.a']
+    bachelors_keywords = ['b.tech', 'btech', 'b.sc', 'bsc', 'b.e.', 'bachelor', 'bca', 'b.c.a', 'b.eng', 'beng', 'b.com']
+    diploma_keywords = ['diploma', 'polytechnic', 'certification', 'certified']
+
+    for kw in phd_keywords:
+        if kw in text_lower:
+            return "PhD", 10
+    for kw in masters_keywords:
+        if kw in text_lower:
+            return "Masters", 10
+    for kw in bachelors_keywords:
+        if kw in text_lower:
+            return "Bachelors", 7
+    for kw in diploma_keywords:
+        if kw in text_lower:
+            return "Diploma", 5
+
+    return "Not detected", 3
+
+def extract_skills_from_jd(jd_text):
+    """Extract required skills from job description using keyword patterns"""
+    # Common tech skills to look for
+    common_skills = [
+        "Python", "Java", "JavaScript", "TypeScript", "C++", "C#", "Go", "Rust", "Ruby",
+        "React", "Angular", "Vue", "Node.js", "Express", "Django", "Flask", "FastAPI",
+        "Spring Boot", "Spring", ".NET", "Laravel", "Rails",
+        "SQL", "MySQL", "PostgreSQL", "MongoDB", "Redis", "Elasticsearch", "Cassandra",
+        "AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform", "Jenkins", "CI/CD",
+        "Git", "GitHub", "GitLab", "Bitbucket",
+        "Machine Learning", "Deep Learning", "NLP", "Computer Vision", "AI",
+        "TensorFlow", "PyTorch", "Scikit-learn", "Pandas", "NumPy",
+        "Power BI", "Tableau", "Excel", "Data Analysis", "Data Science", "Data Engineering",
+        "REST", "API", "GraphQL", "Microservices", "SOA",
+        "Linux", "Unix", "Windows Server", "Networking",
+        "Agile", "Scrum", "JIRA", "Confluence",
+        "HTML", "CSS", "SASS", "Bootstrap", "Tailwind",
+        "Spark", "Hadoop", "Kafka", "Airflow", "ETL",
+        "Selenium", "JUnit", "pytest", "Testing", "QA",
+        "Figma", "Photoshop", "UI/UX",
+        "SAP", "Salesforce", "ServiceNow", "Oracle",
+        "Pyramid Analytics", "model monitoring", "drift detection",
+        "R", "SAS", "SPSS", "MATLAB",
+        "communication", "leadership", "problem-solving", "teamwork",
+    ]
+
+    jd_lower = jd_text.lower()
+    found_skills = []
+    for skill in common_skills:
+        if skill.lower() in jd_lower:
+            found_skills.append(skill)
+
+    # Also extract quoted or bulleted skills
+    bullet_pattern = r'[•\-\*]\s*([A-Za-z][A-Za-z\s/\.#\+]{2,30})'
+    bullets = re.findall(bullet_pattern, jd_text)
+    for b in bullets:
+        b_clean = b.strip()
+        if b_clean and b_clean not in found_skills and len(b_clean) < 30:
+            found_skills.append(b_clean)
+
+    return list(set(found_skills)) if found_skills else ["General skills"]
+
+def fuzzy_match_skills(required_skills, resume_text, threshold=70):
+    """Match skills using fuzzy string matching - handles typos and variations"""
+    resume_lower = resume_text.lower()
+    matched = []
+    missing = []
+
+    for skill in required_skills:
+        skill_lower = skill.lower()
+
+        # Exact match first
+        if skill_lower in resume_lower:
+            matched.append(skill)
+            continue
+
+        # Fuzzy match - check against words/phrases in resume
+        resume_words = re.findall(r'[a-zA-Z][a-zA-Z\s/\.#\+]{2,30}', resume_text)
+        best_match = process.extractOne(skill_lower, [w.lower() for w in resume_words], scorer=fuzz.ratio)
+
+        if best_match and best_match[1] >= threshold:
+            matched.append(skill)
+        else:
+            missing.append(skill)
+
+    return matched, missing
+
+def fuzzy_match_nice_to_have(nice_to_have_skills, resume_text, threshold=70):
+    """Match nice-to-have skills using fuzzy matching"""
+    if not nice_to_have_skills:
+        return []
+    resume_lower = resume_text.lower()
+    matched = []
+    for skill in nice_to_have_skills:
+        skill_lower = skill.lower()
+        if skill_lower in resume_lower:
+            matched.append(skill)
+            continue
+        resume_words = re.findall(r'[a-zA-Z][a-zA-Z\s/\.#\+]{2,30}', resume_text)
+        best_match = process.extractOne(skill_lower, [w.lower() for w in resume_words], scorer=fuzz.ratio)
+        if best_match and best_match[1] >= threshold:
+            matched.append(skill)
+    return matched
+
+def calculate_tfidf_similarity(resume_text, jd_text):
+    """Calculate text similarity between resume and JD using TF-IDF"""
+    try:
+        vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
+        tfidf_matrix = vectorizer.fit_transform([resume_text, jd_text])
+        similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+        return round(similarity * 100, 2)
+    except:
+        return 0
+
 def calculate_verdict_from_score(score):
     """Calculate verdict deterministically from score - NO LLM involvement"""
-    score = max(0, min(100, score))  # Clamp between 0-100
+    score = max(0, min(100, score))
 
     if score >= 85:
         return "Best Fit", "Recommend for Interview"
@@ -464,73 +665,83 @@ def calculate_verdict_from_score(score):
     else:
         return "Not a Fit", "Do Not Recommend"
 
+
+## ===================== HYBRID ANALYSIS ===================== ##
+
 def analyze_resume(client, resume_text, job_description, nice_to_have_skills, candidate_name, job_title):
-    """Analyze a single resume against job description using Groq with DETERMINISTIC scoring"""
+    """HYBRID ML + LLM resume analysis - ML for scoring, LLM for summary only"""
 
-    nice_to_have_text = ", ".join(nice_to_have_skills) if nice_to_have_skills else "None specified"
+    # ==================== STEP 1: ML-BASED SCORING (Deterministic) ====================
 
-    prompt = f"""You are an expert technical recruiter. Analyze this resume against the job description.
+    # 1a. Extract required skills from JD
+    required_skills = extract_skills_from_jd(job_description)
 
-SCORING RULES (Follow EXACTLY - calculate each component):
-1. SKILLS MATCH (0-40 points):
-   - List ALL required skills from JD
-   - Count how many the candidate has
-   - Score = (matched_skills / total_required_skills) * 40
+    # 1b. Skills matching with fuzzy logic (0-40 points)
+    skills_matched, skills_missing = fuzzy_match_skills(required_skills, resume_text)
+    if required_skills:
+        skills_score = round((len(skills_matched) / len(required_skills)) * 40)
+    else:
+        skills_score = 20  # Default if no skills detected
+    skills_score = min(40, skills_score)
 
-2. EXPERIENCE (0-25 points):
-   - Check years of experience vs required
-   - Check if roles are relevant
-   - Full points if meets/exceeds, partial if close
+    # 1c. Experience extraction and scoring (0-25 points)
+    candidate_years = extract_experience_years(resume_text)
+    required_years = extract_required_experience(job_description)
+    if required_years > 0:
+        exp_ratio = min(candidate_years / required_years, 1.5)  # Cap at 150%
+        experience_score = round(exp_ratio * 25)
+    elif candidate_years > 0:
+        experience_score = min(25, candidate_years * 3)  # 3 points per year
+    else:
+        experience_score = 10  # Default
+    experience_score = min(25, experience_score)
 
-3. NICE-TO-HAVE (0-15 points):
-   - Check for bonus skills: {nice_to_have_text}
-   - 5 points per nice-to-have skill found (max 15)
+    # 1d. Nice-to-have skills matching (0-15 points)
+    nice_matched = fuzzy_match_nice_to_have(nice_to_have_skills, resume_text)
+    nice_to_have_score = min(15, len(nice_matched) * 5)
 
-4. EDUCATION (0-10 points):
-   - Relevant degree = 10, Related field = 7, Any degree = 5
+    # 1e. Education detection (0-10 points)
+    education_level, education_score = extract_education(resume_text)
 
-5. PRESENTATION (0-10 points):
-   - Clear formatting, no errors = 10
+    # 1f. TF-IDF relevance score (0-10 points)
+    tfidf_sim = calculate_tfidf_similarity(resume_text, job_description)
+    relevance_score = min(10, round(tfidf_sim / 10))  # Convert 0-100 to 0-10
 
-FINAL SCORE = Sum of all components (0-100)
+    # ==================== TOTAL ML SCORE ====================
+    total_score = skills_score + experience_score + nice_to_have_score + education_score + relevance_score
+    total_score = min(100, max(0, total_score))
 
-Return ONLY this JSON (no other text):
-{{
-    "score_breakdown": {{
-        "skills_score": <0-40>,
-        "experience_score": <0-25>,
-        "nice_to_have_score": <0-15>,
-        "education_score": <0-10>,
-        "presentation_score": <0-10>
-    }},
-    "fit_score": <SUM of above scores>,
-    "email": "<extracted email or 'Not provided'>",
-    "phone": "<extracted phone or 'Not provided'>",
-    "location": "<city/state or 'Not provided'>",
-    "skills_matched": ["skill1", "skill2"],
-    "skills_missing": ["skill1", "skill2"],
-    "nice_to_have_matched": ["skill1"],
-    "current_role": "<current job title or 'Not specified'>",
-    "experience_years": <number>,
-    "strengths": ["strength1", "strength2"],
-    "weaknesses": ["weakness1"],
-    "summary": "<2 sentence evaluation>"
-}}
+    # Deterministic verdict
+    verdict, recommendation = calculate_verdict_from_score(total_score)
 
-JOB TITLE: {job_title}
+    # Contact info extraction (regex)
+    email, phone, location = extract_contact_info(resume_text)
 
-RESUME:
-{resume_text[:4000]}
-
-JOB DESCRIPTION:
-{job_description[:2000]}"""
+    # ==================== STEP 2: LLM FOR SUMMARY ONLY ====================
+    summary = ""
+    current_role = "Not specified"
+    strengths = []
+    weaknesses = []
 
     try:
+        prompt = f"""Analyze this resume briefly. Return ONLY valid JSON:
+{{
+    "current_role": "<current/latest job title>",
+    "strengths": ["strength1", "strength2"],
+    "weaknesses": ["weakness1"],
+    "summary": "<2 sentence evaluation of this candidate for {job_title} role>"
+}}
+
+RESUME (first 2000 chars):
+{resume_text[:2000]}
+
+Return ONLY the JSON object."""
+
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,  # ZERO temperature for maximum consistency
-            max_tokens=1200
+            temperature=0.0,
+            max_tokens=400  # Much less tokens needed now
         )
         result_text = response.choices[0].message.content.strip()
 
@@ -539,66 +750,46 @@ JOB DESCRIPTION:
         elif "```" in result_text:
             result_text = result_text.split("```")[1].split("```")[0]
 
-        result = json.loads(result_text)
+        llm_result = json.loads(result_text)
+        current_role = llm_result.get("current_role", "Not specified")
+        strengths = llm_result.get("strengths", [])
+        weaknesses = llm_result.get("weaknesses", [])
+        summary = llm_result.get("summary", "")
 
-        # VALIDATE and RECALCULATE score from breakdown
-        breakdown = result.get('score_breakdown', {})
-        calculated_score = (
-            min(40, max(0, breakdown.get('skills_score', 0))) +
-            min(25, max(0, breakdown.get('experience_score', 0))) +
-            min(15, max(0, breakdown.get('nice_to_have_score', 0))) +
-            min(10, max(0, breakdown.get('education_score', 0))) +
-            min(10, max(0, breakdown.get('presentation_score', 0)))
-        )
+    except:
+        summary = f"Candidate has {candidate_years} years experience. Matched {len(skills_matched)}/{len(required_skills)} required skills."
+        current_role = "Not specified"
+        strengths = [f"{len(skills_matched)} skills matched"] if skills_matched else []
+        weaknesses = [f"{len(skills_missing)} skills missing"] if skills_missing else []
 
-        # Use calculated score (not LLM's fit_score) for consistency
-        result['fit_score'] = calculated_score
-
-        # DETERMINISTIC verdict based on score
-        verdict, recommendation = calculate_verdict_from_score(calculated_score)
-        result['verdict'] = verdict
-        result['recommendation'] = recommendation
-
-        result['candidate_name'] = candidate_name
-        result['job_title'] = job_title
-        return result
-
-    except json.JSONDecodeError as e:
-        return {
-            "candidate_name": candidate_name,
-            "job_title": job_title,
-            "fit_score": 0,
-            "email": "Not provided",
-            "phone": "Not provided",
-            "location": "Not provided",
-            "skills_matched": [],
-            "skills_missing": [],
-            "nice_to_have_matched": [],
-            "current_role": "Unknown",
-            "experience_years": 0,
-            "strengths": [],
-            "weaknesses": ["Could not parse resume"],
-            "summary": "Error analyzing resume. Please try again.",
-            "verdict": "Not a Fit",
-            "recommendation": "Review Manually",
-            "error": str(e)
+    # ==================== RETURN COMBINED RESULT ====================
+    return {
+        "candidate_name": candidate_name,
+        "job_title": job_title,
+        "fit_score": total_score,
+        "verdict": verdict,
+        "recommendation": recommendation,
+        "email": email,
+        "phone": phone,
+        "location": location,
+        "current_role": current_role,
+        "experience_years": candidate_years,
+        "education_level": education_level,
+        "skills_matched": skills_matched,
+        "skills_missing": skills_missing,
+        "nice_to_have_matched": nice_matched,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "summary": summary,
+        "tfidf_similarity": tfidf_sim,
+        "score_breakdown": {
+            "skills_score": skills_score,
+            "experience_score": experience_score,
+            "nice_to_have_score": nice_to_have_score,
+            "education_score": education_score,
+            "relevance_score": relevance_score
         }
-    except Exception as e:
-        return {
-            "candidate_name": candidate_name,
-            "job_title": job_title,
-            "fit_score": 0,
-            "email": "Not provided",
-            "phone": "Not provided",
-            "location": "Not provided",
-            "current_role": "Unknown",
-            "skills_matched": [],
-            "skills_missing": [],
-            "nice_to_have_matched": [],
-            "error": str(e),
-            "verdict": "Not a Fit",
-            "summary": f"API Error: {str(e)}"
-        }
+    }
 
 def get_category_color(category):
     colors = {

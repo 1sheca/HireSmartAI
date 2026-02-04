@@ -711,9 +711,6 @@ def clean_candidate_name(file_name):
     # Remove trailing numbers in brackets/parens like (1), [1], (2), [2]
     name = re.sub(r'[\[\(]\d+[\]\)]', '', name)
 
-    # Remove "Resume", "CV", "resume" etc. if present
-    name = re.sub(r'(?i)\b(resume|cv|curriculum[\s_\-]?vitae)\b', '', name)
-
     # Remove date patterns like _12_01_26, _12-01-2026, _2026_01_12
     name = re.sub(r'[_\-]?\d{1,2}[_\-]\d{1,2}[_\-]\d{2,4}', '', name)
     name = re.sub(r'[_\-]?\d{4}[_\-]\d{1,2}[_\-]\d{1,2}', '', name)
@@ -723,6 +720,9 @@ def clean_candidate_name(file_name):
 
     # Split CamelCase: "AnkitDarade" -> "Ankit Darade"
     name = split_camel_case(name)
+
+    # Remove "Resume", "CV", etc. AFTER underscores are replaced (so \b works correctly)
+    name = re.sub(r'(?i)\b(resume|cv|curriculum\s*vitae)\b', '', name)
 
     # Remove extra whitespace
     name = re.sub(r'\s+', ' ', name).strip()

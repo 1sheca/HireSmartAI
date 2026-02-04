@@ -1344,9 +1344,12 @@ if st.session_state.analyzed and st.session_state.results:
 
     results = st.session_state.results
     job_title = st.session_state.get("job_title", "Not specified")
+    total_files = st.session_state.get("total_files_processed", len(results))
+    duplicates = st.session_state.get("duplicates_count", 0)
 
     st.markdown("---")
 
+    # Job Title Banner
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
                 padding: 1rem 1.5rem;
@@ -1359,33 +1362,7 @@ if st.session_state.analyzed and st.session_state.results:
     </div>
     """, unsafe_allow_html=True)
 
-    # ✅ Filtering UI
-    st.markdown("### 🔍 Filter Results")
-
-    filter_col1, filter_col2 = st.columns(2)
-
-    with filter_col1:
-        min_score = st.slider("Minimum Score", 0, 100, 0)
-
-    with filter_col2:
-        filter_verdict = st.multiselect(
-            "Verdict",
-            ["Best Fit", "Strong Fit", "Average", "Not a Fit"],
-            default=["Best Fit", "Strong Fit", "Average", "Not a Fit"]
-        )
-
-    # ✅ Apply filters safely
-    filtered_results = [
-        r for r in results
-        if r.get("fit_score", 0) >= min_score
-        and r.get("verdict", "Not a Fit") in filter_verdict
-    ]
-
-    # ✅ Stats
-    total_files = st.session_state.get("total_files_processed", len(results))
-    duplicates = st.session_state.get("duplicates_count", 0)
-
-    # ✅ Categorize results
+    # Categorize ALL results
     categories = {
         "Best Fit": [],
         "Strong Fit": [],
@@ -1393,9 +1370,8 @@ if st.session_state.analyzed and st.session_state.results:
         "Not a Fit": []
     }
 
-    for res in filtered_results:
+    for res in results:
         verdict = res.get("verdict", "Not a Fit")
-
         if "Best" in verdict:
             categories["Best Fit"].append(res)
         elif "Strong" in verdict:
@@ -1405,34 +1381,167 @@ if st.session_state.analyzed and st.session_state.results:
         else:
             categories["Not a Fit"].append(res)
 
-    # ✅ Show candidates
-    for category, category_results in categories.items():
+    # ==================== METRIC CARDS ====================
+    st.markdown("### 📊 Processing Summary")
 
+    mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+
+    with mc1:
+        st.markdown(f"""
+        <div style="background: #ede9fe; border-left: 4px solid #7c3aed; padding: 1rem; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700; color: #7c3aed;">{len(categories["Best Fit"])}</div>
+            <div style="font-size: 0.85rem; color: #5b21b6;">Best Fit</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with mc2:
+        st.markdown(f"""
+        <div style="background: #d1fae5; border-left: 4px solid #059669; padding: 1rem; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700; color: #059669;">{len(categories["Strong Fit"])}</div>
+            <div style="font-size: 0.85rem; color: #047857;">Strong Fit</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with mc3:
+        st.markdown(f"""
+        <div style="background: #fef3c7; border-left: 4px solid #d97706; padding: 1rem; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700; color: #d97706;">{len(categories["Average"])}</div>
+            <div style="font-size: 0.85rem; color: #b45309;">Average</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with mc4:
+        st.markdown(f"""
+        <div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 1rem; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700; color: #dc2626;">{len(categories["Not a Fit"])}</div>
+            <div style="font-size: 0.85rem; color: #b91c1c;">Not a Fit</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with mc5:
+        st.markdown(f"""
+        <div style="background: #e0e7ff; border-left: 4px solid #4f46e5; padding: 1rem; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700; color: #4f46e5;">{duplicates}</div>
+            <div style="font-size: 0.85rem; color: #3730a3;">Duplicates Skipped</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.caption(f"Total uploaded: {total_files} | Unique analyzed: {len(results)} | Duplicates skipped: {duplicates}")
+
+    st.markdown("---")
+
+    # ==================== CATEGORY SECTIONS WITH VIEW DETAILS ====================
+    category_icons = {"Best Fit": "🏆", "Strong Fit": "✅", "Average": "📋", "Not a Fit": "❌"}
+    category_colors = {"Best Fit": "#7c3aed", "Strong Fit": "#059669", "Average": "#d97706", "Not a Fit": "#dc2626"}
+
+    for category, category_results in categories.items():
         if not category_results:
             continue
 
-        st.markdown(f"## ✅ {category} ({len(category_results)})")
+        color = category_colors[category]
+        icon = category_icons[category]
 
-        for candidate in category_results:
+        st.markdown(f"""
+        <div style="display: flex; align-items: center; gap: 10px; margin: 1.5rem 0 0.75rem 0; padding-bottom: 0.5rem; border-bottom: 3px solid {color};">
+            <span style="font-size: 1.5rem;">{icon}</span>
+            <span style="font-size: 1.25rem; font-weight: 700; color: #1f2937;">{category}</span>
+            <span style="background: {color}; color: white; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: 600;">{len(category_results)}</span>
+        </div>
+        """, unsafe_allow_html=True)
 
+        for idx, candidate in enumerate(category_results):
+            cand_name = candidate.get("candidate_name", "Unknown")
+            cand_score = candidate.get("fit_score", 0)
+            cand_role = candidate.get("current_role", "N/A")
+            cand_loc = candidate.get("location", "N/A")
+            cand_exp = candidate.get("experience_years", 0)
+            cand_email = candidate.get("email", "N/A")
+            cand_phone = candidate.get("phone", "N/A")
+            cand_rec = candidate.get("recommendation", "N/A")
+
+            # Candidate header
             st.markdown(f"""
-            **👤 {candidate.get("candidate_name","Unknown")}**  
-            ✅ Score: {candidate.get("fit_score",0)}%  
-            📍 Location: {candidate.get("location","N/A")}  
-            💼 Role: {candidate.get("current_role","N/A")}  
-            🎯 Recommendation: {candidate.get("recommendation","N/A")}
+            **👤 {cand_name}** — Score: **{cand_score}%** | 📍 {cand_loc} | 💼 {cand_role} | 📅 {cand_exp} yrs | 🎯 {cand_rec}
             """)
+
+            # Expandable View Details
+            with st.expander(f"View Details - {cand_name}"):
+
+                # Score Breakdown
+                breakdown = candidate.get("score_breakdown", {})
+                st.markdown("**📊 Score Breakdown:**")
+                bd_c1, bd_c2, bd_c3, bd_c4, bd_c5 = st.columns(5)
+                bd_c1.metric("Skills", f"{breakdown.get('skills_score', 0)}/40")
+                bd_c2.metric("Experience", f"{breakdown.get('experience_score', 0)}/25")
+                bd_c3.metric("Nice-to-Have", f"{breakdown.get('nice_to_have_score', 0)}/15")
+                bd_c4.metric("Education", f"{breakdown.get('education_score', 0)}/10")
+                bd_c5.metric("Relevance", f"{breakdown.get('relevance_score', 0)}/10")
+
+                st.markdown("---")
+
+                det_c1, det_c2 = st.columns(2)
+
+                with det_c1:
+                    # Contact Info
+                    st.markdown(f"**📧 Email:** {cand_email}")
+                    st.markdown(f"**📱 Phone:** {cand_phone}")
+                    st.markdown(f"**🎓 Education:** {candidate.get('education_level', 'N/A')}")
+
+                    # Skills Matched
+                    matched = candidate.get("skills_matched", [])
+                    if matched:
+                        st.markdown("**✅ Skills Matched:**")
+                        skills_html = "".join([f'<span class="skill-matched">{s}</span>' for s in matched])
+                        st.markdown(skills_html, unsafe_allow_html=True)
+
+                    # Skills Missing
+                    missing = candidate.get("skills_missing", [])
+                    if missing:
+                        st.markdown("**❌ Skills Missing:**")
+                        missing_html = "".join([f'<span class="skill-missing">{s}</span>' for s in missing])
+                        st.markdown(missing_html, unsafe_allow_html=True)
+
+                    # Nice-to-Have Matched
+                    nice = candidate.get("nice_to_have_matched", [])
+                    if nice:
+                        st.markdown("**🎁 Nice-to-Have Matched:**")
+                        nice_html = "".join([f'<span class="skill-nice">{s}</span>' for s in nice])
+                        st.markdown(nice_html, unsafe_allow_html=True)
+
+                with det_c2:
+                    # Strengths
+                    strengths = candidate.get("strengths", [])
+                    if strengths:
+                        st.markdown("**💪 Strengths:**")
+                        for s in strengths:
+                            st.markdown(f"- {s}")
+
+                    # Weaknesses
+                    weaknesses = candidate.get("weaknesses", [])
+                    if weaknesses:
+                        st.markdown("**⚠️ Weaknesses:**")
+                        for w in weaknesses:
+                            st.markdown(f"- {w}")
+
+                    # Summary
+                    summary = candidate.get("summary", "")
+                    if summary:
+                        st.markdown(f"**📝 Summary:** {summary}")
+
+                    # TF-IDF Similarity
+                    tfidf = candidate.get("tfidf_similarity", 0)
+                    if tfidf:
+                        st.markdown(f"**📐 Resume-JD Similarity:** {tfidf}%")
+
             st.markdown("---")
 
-    # ✅ ---------------- DOWNLOAD REPORTS SECTION ----------------
+    # ==================== DOWNLOAD REPORTS ====================
     st.markdown("## 📥 Download Reports")
 
     download_col1, download_col2, download_col3 = st.columns(3)
 
-    # ✅ Create DataFrame safely
     df = create_excel_report(results, categories, total_files, duplicates, job_title)
 
-    # ✅ CSV Download
     with download_col1:
         st.download_button(
             "📄 Download CSV",
@@ -1441,14 +1550,11 @@ if st.session_state.analyzed and st.session_state.results:
             "text/csv"
         )
 
-    # ✅ Excel Download
     with download_col2:
         excel_buffer = io.BytesIO()
         with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
             df.to_excel(writer, index=False)
-
         excel_buffer.seek(0)
-
         st.download_button(
             "📊 Download Excel",
             excel_buffer,
@@ -1456,16 +1562,8 @@ if st.session_state.analyzed and st.session_state.results:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-    # ✅ PDF Download
     with download_col3:
-        pdf_bytes = generate_pdf_report(
-            results,
-            job_title,
-            categories,
-            total_files,
-            duplicates
-        )
-
+        pdf_bytes = generate_pdf_report(results, job_title, categories, total_files, duplicates)
         st.download_button(
             "📑 Download PDF",
             pdf_bytes,

@@ -1516,6 +1516,22 @@ if analyze_clicked:
             progress_bar.progress(1.0)
 
             results.sort(key=lambda x: x.get('fit_score', 0), reverse=True)
+
+            # Name-based deduplication: if same candidate name appears multiple times,
+            # keep only the one with the highest score
+            seen_names = {}
+            unique_results = []
+            name_duplicates = 0
+            for res in results:
+                name_key = res.get('candidate_name', '').strip().lower()
+                if name_key and name_key != 'unknown' and name_key in seen_names:
+                    name_duplicates += 1
+                else:
+                    seen_names[name_key] = True
+                    unique_results.append(res)
+            results = unique_results
+            duplicates_skipped += name_duplicates
+
             st.session_state.results = results
             st.session_state.analyzed = True
             st.session_state.job_title = job_title
